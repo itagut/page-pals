@@ -116,14 +116,15 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
     </div>
     <div class="card" style="margin-top:16px">
       <h2 id="photoTitle">Now take a photo of a page</h2>
-      <p class="note">Lay the book flat in good light. Fill the screen with the page.</p>
+      <p class="note">Lay the book flat in good light. Fill the screen with the page. Already have photos? Upload one page, or several pages at once in reading order.</p>
       <div class="row">
         <label class="btn" for="camFile">Take a photo</label>
         <input id="camFile" class="vh" type="file" accept="image/*" capture="environment">
-        <label class="btn ghost" for="libFile">Choose a photo</label>
-        <input id="libFile" class="vh" type="file" accept="image/*">
+        <label class="btn ghost" for="libFile">Upload photos</label>
+        <input id="libFile" class="vh" type="file" accept="image/*" multiple>
         <button class="btn ghost" id="sampleBtn">Try a sample page</button>
       </div>
+      <p class="note" id="queueNote" hidden></p>
       <p class="err" id="startErr" hidden></p>
     </div>
   </section>
@@ -231,7 +232,7 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
 
 <script>
 const $ = id => document.getElementById(id);
-const VERSION="Version 10 (iPhone listening, zoom)";
+const VERSION="Version 11 (upload several pages)";
 document.querySelectorAll(".ver").forEach(e=>e.textContent=VERSION);
 let scanInfo="";
 function renderDiag(){
@@ -490,7 +491,18 @@ async function handlePhoto(file){
   }
 }
 $("camFile").addEventListener("change",e=>{handlePhoto(e.target.files[0]); e.target.value="";});
-$("libFile").addEventListener("change",e=>{handlePhoto(e.target.files[0]); e.target.value="";});
+/* Uploaded pages wait in a queue: "Next page" opens the next one without the camera. */
+let pageQueue=[];
+function updateQueueNote(){
+  const n=pageQueue.length;
+  $("queueNote").hidden=!n; $("queueNote").textContent = n ? `${n} uploaded page${n===1?"":"s"} waiting.` : "";
+  $("nextBtn").textContent = n ? `Next page (${n} left)` : "Next page";
+}
+$("libFile").addEventListener("change",e=>{
+  const files=[...e.target.files].sort((a,b)=>(a.lastModified||0)-(b.lastModified||0));   // oldest first = order they were taken
+  e.target.value=""; if(!files.length) return;
+  pageQueue=files.slice(1); updateQueueNote(); handlePhoto(files[0]);
+});
 
 /* sample page, drawn in code so it works with no camera or internet word finder */
 $("sampleBtn").addEventListener("click", async ()=>{
@@ -1038,9 +1050,13 @@ function showStats(all){
   $("nextBtn").hidden=all; $("finishBtn").textContent = all ? "Start a new book" : "All done";
   show("s-done");
 }
-$("nextBtn").onclick=()=>{ $("photoTitle").textContent=`Take a photo of page ${pageNo+1}`; cancelAnimationFrame(raf); show("s-start"); };
+$("nextBtn").onclick=()=>{
+  cancelAnimationFrame(raf);
+  if(pageQueue.length){ const f=pageQueue.shift(); updateQueueNote(); handlePhoto(f); return; }
+  $("photoTitle").textContent=`Take a photo of page ${pageNo+1}`; show("s-start");
+};
 $("finishBtn").onclick=()=>{
-  if($("nextBtn").hidden){ totals={words:0,ms:0,help:0}; hardWords=new Set(); pageNo=0; $("photoTitle").textContent="Now take a photo of a page"; show("s-start"); }
+  if($("nextBtn").hidden){ totals={words:0,ms:0,help:0}; hardWords=new Set(); pageNo=0; pageQueue=[]; updateQueueNote(); $("photoTitle").textContent="Now take a photo of a page"; show("s-start"); }
   else { cancelAnimationFrame(raf); showStats(true); }
 };
 
