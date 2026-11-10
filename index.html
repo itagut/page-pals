@@ -127,6 +127,13 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
       <p class="note" id="queueNote" hidden></p>
       <p class="err" id="startErr" hidden></p>
     </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Microphone check</h2>
+      <p class="note">Tap Test, then read a sentence out loud. The words this phone hears show up below.</p>
+      <div class="row"><button class="btn ghost" id="micTestBtn">Test the microphone</button></div>
+      <p class="note" id="micTestState" hidden></p>
+      <p class="heard" id="micTestOut" hidden></p>
+    </div>
   </section>
 
   <!-- 2. READING THE PHOTO -->
@@ -232,7 +239,7 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
 
 <script>
 const $ = id => document.getElementById(id);
-const VERSION="Version 11 (upload several pages)";
+const VERSION="Version 12 (microphone check, kinder matching)";
 document.querySelectorAll(".ver").forEach(e=>e.textContent=VERSION);
 let scanInfo="";
 function renderDiag(){
@@ -296,7 +303,7 @@ let totals={words:0,ms:0,help:0}, pageStart=0, pageHelp=0, hardWords=new Set();
 let lastWordAt=0, raf=0, tapMode=false, rec=null, listening=false;
 
 function loadImage(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});}
-function show(id){["s-start","s-scan","s-read","s-done"].forEach(s=>$(s).hidden=s!==id); window.scrollTo(0,0);}
+function show(id){ if(id!=="s-start" && typeof stopMicTest==="function") stopMicTest();["s-start","s-scan","s-read","s-done"].forEach(s=>$(s).hidden=s!==id); window.scrollTo(0,0);}
 function startErr(msg){$("startErr").textContent=msg; $("startErr").hidden=!msg;}
 
 /* ---------------- photo -> words ---------------- */
@@ -542,17 +549,32 @@ const SAME={to:"two",too:"two",two:"two",sea:"see",see:"see",son:"sun",sun:"sun"
   hi:"high",high:"high",one:"won",won:"won",dear:"deer",deer:"deer",fox:"fox",fax:"fox",box:"fox",socks:"fox",i:"eye",eye:"eye"};
 function lev(a,b){const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;
   for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]}
+const bare=x=>x.replace(/'/g,"");
 function similar(h,w){
-  if(!h) return false; if(h===w) return true;
+  if(!h) return false; h=bare(h); w=bare(w); if(h===w) return true;
   if((SAME[h]||h)===(SAME[w]||w)) return true;
-  if(w.length>=4 && lev(h,w)<=1) return true;
-  return w.length>=7 && lev(h,w)<=2;
+  if(w.endsWith("s") && w.slice(0,-1)===h) return true;              // "bird" for "birds"
+  if(h.endsWith("s") && h.slice(0,-1)===w) return true;
+  const d=lev(h,w);
+  if(w.length>=4 && d<=1) return true;
+  if(w.length>=6 && d<=2) return true;
+  if(w.length>=9 && d<=3) return true;                                // long words: kids' speech is often transcribed a bit off
+  return w.length>=3 && h[0]===w[0] && d<=1;                          // short words: same first sound, one letter off
 }
 let active=[]; // indices of words not removed
+let heardCount=0, matchCount=0;
 function advance(heard,start){
-  let p=start;
-  for(const raw of heard){const h=norm(raw); if(!h||p>=active.length) continue;
-    for(let k=0;k<3&&p+k<active.length;k++){ if(similar(h,words[active[p+k]].key)){p=p+k+1;break;} } }
+  let p=start; const hs=heard.map(norm).filter(Boolean);
+  for(let i=0;i<hs.length && p<active.length;i++){
+    const h=hs[i], h2 = i+1<hs.length ? h+hs[i+1] : null;           // "bird seed" for "birdseed"
+    for(let k=0;k<4&&p+k<active.length;k++){
+      const want=words[active[p+k]].key;
+      if(similar(h,want)){ p=p+k+1; break; }
+      if(h2 && similar(h2,want)){ p=p+k+1; i++; break; }
+      // "does not" for "doesn't"
+      if(want.endsWith("n't") && i+1<hs.length && hs[i+1]==="not" && similar(h,want.slice(0,-3))){ p=p+k+1; i++; break; }
+    }
+  }
   return p;
 }
 
@@ -988,6 +1010,7 @@ const MIC_HELP={
   "language-not-supported":"This phone can't recognise English speech in the browser."
 };
 function heard(text){ $("heard").hidden=false; $("heardText").textContent=text; }
+function heardEmpty(){ $("heard").hidden=false; $("heardText").textContent="nothing yet"; }
 function micState(txt,on){ $("micText").textContent=txt; $("micDot").classList.toggle("on",!!on); }
 function needTap(msg){ $("micHelp").textContent=msg; $("micHelp").hidden=false; $("relisten").hidden=false; micState("Not listening",false); }
 function startListening(){
@@ -1025,10 +1048,26 @@ function startListening(){
     try{ rec.start(); }
     catch(_){ restartFails++; needTap("Listening stopped. Tap Keep listening to carry on."); }
   };
-  listening=true; committed=pos;
+  listening=true; committed=pos; heardEmpty();
   try{ rec.start(); micState("Starting the microphone…",true); }
   catch(_){ needTap("The microphone didn't start. Tap Keep listening."); }
 }
+let testRec=null;
+function stopMicTest(){ if(testRec){ try{testRec.abort();}catch(_){} testRec=null; } $("micTestBtn").textContent="Test the microphone"; }
+$("micTestBtn").onclick=()=>{
+  if(testRec){ stopMicTest(); $("micTestState").textContent="Test stopped."; return; }
+  const st=$("micTestState"), out=$("micTestOut"); st.hidden=false; out.hidden=false; out.textContent="Heard: nothing yet";
+  if(!SR){ st.textContent="This browser has no speech recognition. On iPhone, use Safari."; return; }
+  try{ testRec=new SR(); }catch(e){ st.textContent="Speech recognition couldn't start: "+e.message; return; }
+  const r=testRec; r.lang="en-US"; r.interimResults=true; r.continuous=!IOS;
+  const log=[]; const note=t=>{ log.push(t); st.textContent="Status: "+log.slice(-4).join(" → "); };
+  r.onstart=()=>note("listening"); r.onaudiostart=()=>note("mic on"); r.onspeechstart=()=>note("hearing speech");
+  r.onresult=e=>{ let t=""; for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript+" "; out.textContent="Heard: "+t.trim(); };
+  r.onerror=e=>{ note("error: "+e.error); if(MIC_HELP[e.error]) st.textContent+=". "+MIC_HELP[e.error].replace(/, then tap Keep listening\./,"."); };
+  r.onend=()=>{ note("stopped"); if(testRec===r){ try{ r.start(); }catch(_){ stopMicTest(); } } };
+  $("micTestBtn").textContent="Stop the test";
+  try{ r.start(); note("starting"); }catch(e){ note("couldn't start: "+e.message); stopMicTest(); }
+};
 function stopListening(){ stopBeats(); listening=false; if(rec){try{rec.abort();}catch(_){}} $("micDot").classList.remove("on"); $("relisten").hidden=true; }
 function setTap(msg){ stopBeats(); tapMode=true; $("micDot").classList.remove("on"); $("micText").textContent=msg; }
 
