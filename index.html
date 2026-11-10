@@ -18,6 +18,8 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0}
+html{touch-action:manipulation;-webkit-text-size-adjust:100%}
+#viewport{touch-action:pan-x pan-y}
 body{background:var(--sky);color:var(--ink);font-family:var(--read);font-size:17px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   padding-block:max(16px,env(safe-area-inset-top,0px)) 40px;min-height:100vh;-webkit-tap-highlight-color:transparent}
@@ -239,7 +241,7 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
 
 <script>
 const $ = id => document.getElementById(id);
-const VERSION="Version 12 (microphone check, kinder matching)";
+const VERSION="Version 13 (pinch to zoom the photo only)";
 document.querySelectorAll(".ver").forEach(e=>e.textContent=VERSION);
 let scanInfo="";
 function renderDiag(){
@@ -671,22 +673,43 @@ $("beatToggle").addEventListener("change",()=>{ if(mode!=="read") return;
 const NS="http://www.w3.org/2000/svg";
 /* Zoom the photo while checking words: buttons set the size, one finger scrolls around. */
 const ZOOMS=[1,1.5,2,3,4]; let rz=1;
-function applyReviewZoom(){
+function applyReviewZoom(focus){
   const vp=$("viewport"), st=$("stage"), on=mode==="review";
   $("zoomCtl").hidden=!on;
-  if(!on){ rz=1; st.style.width=""; vp.classList.remove("rz"); $("s-read").classList.remove("zoomed"); return; }
+  if(!on){ rz=1; st.style.width=""; vp.classList.remove("rz"); vp.style.height=""; $("s-read").classList.remove("zoomed"); return; }
   const cw=vp.clientWidth||1, oldW=st.offsetWidth||cw, oldH=st.offsetHeight||1;
-  const cx=(vp.scrollLeft+cw/2)/oldW, cy=(vp.scrollTop+vp.clientHeight/2)/oldH;
-  st.style.width = rz>1 ? Math.round(cw*rz)+"px" : "";
-  vp.classList.toggle("rz",rz>1);
-  vp.style.height = rz>1 ? Math.round(Math.min(cw*H/W, window.innerHeight*0.62))+"px" : "";
-  $("s-read").classList.toggle("zoomed",rz>1);
-  vp.scrollLeft=cx*st.offsetWidth-cw/2; vp.scrollTop=cy*st.offsetHeight-vp.clientHeight/2;
-  $("zLbl").textContent=rz+"×"; $("zOut").disabled=rz===ZOOMS[0]; $("zIn").disabled=rz===ZOOMS[ZOOMS.length-1];
-  $("addHint").textContent = rz>1 ? "Tap the missing word on the photo. Use one finger to move around." : "Tap the missing word on the photo. You can also drag a box around it.";
+  // keep the spot under the fingers (or the middle) in place
+  const px=focus?focus.px:cw/2, py=focus?focus.py:vp.clientHeight/2;
+  const fx=(vp.scrollLeft+px)/oldW, fy=(vp.scrollTop+py)/oldH;
+  st.style.width = rz>1.01 ? Math.round(cw*rz)+"px" : "";
+  vp.classList.toggle("rz",rz>1.01);
+  vp.style.height = rz>1.01 ? Math.round(Math.min(cw*H/W, window.innerHeight*0.62))+"px" : "";
+  $("s-read").classList.toggle("zoomed",rz>1.01);
+  vp.scrollLeft=fx*st.offsetWidth-px; vp.scrollTop=fy*st.offsetHeight-py;
+  $("zLbl").textContent=(Math.round(rz*10)/10)+"×"; $("zOut").disabled=rz<=1.01; $("zIn").disabled=rz>=3.99;
+  $("addHint").textContent = rz>1.01 ? "Tap the missing word on the photo. Use one finger to move around." : "Tap the missing word on the photo. You can also drag a box around it.";
 }
-$("zIn").onclick=()=>{ rz=ZOOMS[Math.min(ZOOMS.length-1,ZOOMS.indexOf(rz)+1)]; applyReviewZoom(); };
-$("zOut").onclick=()=>{ rz=ZOOMS[Math.max(0,ZOOMS.indexOf(rz)-1)]; applyReviewZoom(); };
+$("zIn").onclick=()=>{ rz=ZOOMS.find(z=>z>rz+0.01)||4; applyReviewZoom(); };
+$("zOut").onclick=()=>{ rz=[...ZOOMS].reverse().find(z=>z<rz-0.01)||1; applyReviewZoom(); };
+/* Pinch with two fingers on the photo zooms only the photo. */
+(function(){
+  const vp=$("viewport"); let start=null;
+  const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+  vp.addEventListener("touchstart",e=>{
+    if(e.touches.length===2){ e.preventDefault(); start={d:dist(e.touches),z:rz}; }
+  },{passive:false});
+  vp.addEventListener("touchmove",e=>{
+    if(e.touches.length!==2){ return; }
+    e.preventDefault();                                   // never let the browser zoom the whole page
+    if(mode!=="review"||!start) return;
+    const r=vp.getBoundingClientRect();
+    const px=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left, py=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top;
+    rz=Math.max(1,Math.min(4,start.z*dist(e.touches)/start.d)); applyReviewZoom({px,py});
+  },{passive:false});
+  vp.addEventListener("touchend",e=>{ if(e.touches.length<2) start=null; });
+  // Safari's own pinch events: block them on the photo so the page itself never zooms
+  ["gesturestart","gesturechange","gestureend"].forEach(n=>vp.addEventListener(n,e=>e.preventDefault(),{passive:false}));
+})();
 window.addEventListener("resize",()=>{ if(mode==="review") applyReviewZoom(); });
 function setPage(found){
   words=found; pos=0; committed=0; mode="review"; pageNo++; rz=1;
