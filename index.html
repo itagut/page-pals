@@ -74,6 +74,15 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
 .diag ol{margin:8px 0 0;padding-left:22px;font-size:.92rem;font-variant-numeric:tabular-nums;max-height:320px;overflow:auto}
 .diag li.off{color:#b91c1c}
 .ver{margin:0;font-size:.8rem;color:var(--muted)}
+.heard{margin:0;font-size:.95rem;color:var(--ink);background:var(--sky);border-radius:12px;padding:8px 12px}
+.heard span{font-weight:700}
+.vpwrap{position:relative}
+#viewport.rz{overflow:auto;-webkit-overflow-scrolling:touch;transition:none}
+.zoomctl{position:absolute;top:10px;right:10px;z-index:3;display:flex;align-items:center;gap:4px;background:var(--paper);border-radius:999px;padding:4px;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.zoomctl button{width:40px;height:40px;border-radius:50%;border:0;background:var(--ink);color:#fff;font-family:var(--display);font-weight:800;font-size:1.4rem;line-height:1;cursor:pointer}
+.zoomctl button[disabled]{opacity:.35}
+.zoomctl span{min-width:34px;text-align:center;font-family:var(--display);font-weight:700;font-variant-numeric:tabular-nums}
+.adding.zoomed #overlay{touch-action:pan-x pan-y;cursor:pointer}
 .meter{width:56px;height:10px;border-radius:999px;background:var(--line);overflow:hidden;flex:none}
 .meter i{display:block;height:100%;width:0;background:var(--muted);border-radius:999px}
 .meter.beat i{background:#e5484d}
@@ -134,9 +143,14 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
       <span class="pages" id="pageLabel">Page 1</span>
       <div class="status"><span class="meter" id="meter" hidden title="Voice beats"><i id="lvl"></i></span><span class="dot" id="micDot"></span><span id="micText"></span></div>
     </div>
-    <div id="viewport">
-      <div class="bubble" id="bubble" hidden></div>
-      <div id="stage"><canvas id="photo"></canvas><svg id="overlay"></svg></div>
+    <div class="vpwrap">
+      <div id="viewport">
+        <div class="bubble" id="bubble" hidden></div>
+        <div id="stage"><canvas id="photo"></canvas><svg id="overlay"></svg></div>
+      </div>
+      <div class="zoomctl" id="zoomCtl" hidden>
+        <button id="zOut" aria-label="Zoom out">−</button><span id="zLbl">1×</span><button id="zIn" aria-label="Zoom in">+</button>
+      </div>
     </div>
 
     <div class="card" id="reviewPanel" style="margin-top:14px">
@@ -189,6 +203,9 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
         </div>
       </div>
       <p class="note" id="readHint">Read the word under the yellow glow. Stuck? Tap it to hear it.</p>
+      <p class="heard" id="heard" hidden>The app heard: <span id="heardText"></span></p>
+      <p class="err" id="micHelp" hidden></p>
+      <div class="row"><button class="btn small" id="relisten" hidden>Keep listening</button></div>
       <p class="note" id="beatNote" hidden></p>
     </div>
   </section>
@@ -214,7 +231,7 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
 
 <script>
 const $ = id => document.getElementById(id);
-const VERSION="Version 9 (tap to add a word)";
+const VERSION="Version 10 (iPhone listening, zoom)";
 document.querySelectorAll(".ver").forEach(e=>e.textContent=VERSION);
 let scanInfo="";
 function renderDiag(){
@@ -618,15 +635,34 @@ $("beatToggle").addEventListener("change",()=>{ if(mode!=="read") return;
 
 /* ---------------- stage ---------------- */
 const NS="http://www.w3.org/2000/svg";
+/* Zoom the photo while checking words: buttons set the size, one finger scrolls around. */
+const ZOOMS=[1,1.5,2,3,4]; let rz=1;
+function applyReviewZoom(){
+  const vp=$("viewport"), st=$("stage"), on=mode==="review";
+  $("zoomCtl").hidden=!on;
+  if(!on){ rz=1; st.style.width=""; vp.classList.remove("rz"); $("s-read").classList.remove("zoomed"); return; }
+  const cw=vp.clientWidth||1, oldW=st.offsetWidth||cw, oldH=st.offsetHeight||1;
+  const cx=(vp.scrollLeft+cw/2)/oldW, cy=(vp.scrollTop+vp.clientHeight/2)/oldH;
+  st.style.width = rz>1 ? Math.round(cw*rz)+"px" : "";
+  vp.classList.toggle("rz",rz>1);
+  vp.style.height = rz>1 ? Math.round(Math.min(cw*H/W, window.innerHeight*0.62))+"px" : "";
+  $("s-read").classList.toggle("zoomed",rz>1);
+  vp.scrollLeft=cx*st.offsetWidth-cw/2; vp.scrollTop=cy*st.offsetHeight-vp.clientHeight/2;
+  $("zLbl").textContent=rz+"×"; $("zOut").disabled=rz===ZOOMS[0]; $("zIn").disabled=rz===ZOOMS[ZOOMS.length-1];
+  $("addHint").textContent = rz>1 ? "Tap the missing word on the photo. Use one finger to move around." : "Tap the missing word on the photo. You can also drag a box around it.";
+}
+$("zIn").onclick=()=>{ rz=ZOOMS[Math.min(ZOOMS.length-1,ZOOMS.indexOf(rz)+1)]; applyReviewZoom(); };
+$("zOut").onclick=()=>{ rz=ZOOMS[Math.max(0,ZOOMS.indexOf(rz)-1)]; applyReviewZoom(); };
+window.addEventListener("resize",()=>{ if(mode==="review") applyReviewZoom(); });
 function setPage(found){
-  words=found; pos=0; committed=0; mode="review"; pageNo++;
+  words=found; pos=0; committed=0; mode="review"; pageNo++; rz=1;
   $("pageLabel").textContent="Page "+pageNo;
   $("overlay").setAttribute("viewBox",`0 0 ${W} ${H}`);
   closeEditor(); setAdding(false); updateFound();
   $("reviewPanel").hidden=false; $("readPanel").hidden=true; $("pausePanel").hidden=true; $("bubble").hidden=true;
   $("micText").textContent=""; $("micDot").classList.remove("on");
   setZoom(false); $("zoomToggle").checked=false;
-  show("s-read"); drawOverlay();
+  show("s-read"); drawOverlay(); applyReviewZoom();
 }
 function drawOverlay(){
   const svg=$("overlay");
@@ -658,6 +694,7 @@ function drawOverlay(){
 }
 $("overlay").addEventListener("click",e=>{
   if(justDragged){ justDragged=false; return; }
+  if(mode==="review" && adding && rz>1){ readSpot({tap:toImg(e)}); return; }
   const t=e.target.closest("[data-i],[data-k]"); if(!t) return;
   if(mode==="review"){ if(adding) return; openEditor(+t.dataset.i); return; }
   const si=shownIdx();
@@ -724,7 +761,7 @@ $("addBtn").onclick=()=>setAdding(!adding);
 function toImg(e){ const r=$("overlay").getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; }
 function normRect(b){ return {x:Math.min(b.x0,b.x1), y:Math.min(b.y0,b.y1), w:Math.abs(b.x1-b.x0), h:Math.abs(b.y1-b.y0)}; }
 $("overlay").addEventListener("pointerdown",e=>{
-  if(mode!=="review"||!adding) return;
+  if(mode!=="review"||!adding||rz>1) return;
   e.preventDefault(); const p=toImg(e); dragBox={x0:p.x,y0:p.y,x1:p.x,y1:p.y};
   try{$("overlay").setPointerCapture(e.pointerId);}catch(_){}
   drawOverlay();
@@ -817,7 +854,7 @@ $("overBtn").onclick=()=>{
 $("fixBtn").onclick=()=>{
   paused=false; mode="review"; setZoom(false); queue=[]; hop=null;
   $("pausePanel").hidden=true; $("reviewPanel").hidden=false; $("micText").textContent="";
-  updateFound(); drawOverlay();
+  updateFound(); drawOverlay(); applyReviewZoom();
 };
 $("newPhotoBtn").onclick=()=>{ paused=false; cancelAnimationFrame(raf); pageNo--; show("s-start"); };
 
@@ -899,6 +936,8 @@ $("goBtn").onclick=()=>{
   closeEditor(); setAdding(false); paused=false; $("pausePanel").hidden=true;
   active=words.map((w,i)=>w.off?-1:i).filter(i=>i>=0);
   if(!active.length){ $("foundTitle").textContent="Keep at least one word"; return; }
+  mode="read"; applyReviewZoom();
+  $("heard").hidden=true;
   const hs=active.map(i=>words[i].h).sort((a,b)=>a-b); lineH=hs[Math.floor(hs.length/2)];
   mode="read"; pos=0; committed=0; pageHelp=0; queue=[]; hop=null;
   $("reviewPanel").hidden=true; $("readPanel").hidden=false;
@@ -925,35 +964,60 @@ function setPos(p){
 function drawOverlayKeepBuddy(){ drawOverlay(); } // buddy element is rebuilt; position comes from cur/hop state
 $("skipBtn").onclick=()=>{ if(pos<active.length){ committed=Math.max(committed,pos+1); setPos(pos+1);} };
 $("stopBtn").onclick=pause;
+$("relisten").onclick=()=>{ startListening(); };
 
+const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+let gotResult=false, restartFails=0;
+const MIC_HELP={
+  "not-allowed":"The microphone is blocked for this site. In Safari, tap the “aA” button → Website Settings → Microphone → Allow, then tap Keep listening.",
+  "service-not-allowed":"Speech recognition is off on this phone. Turn on Dictation in Settings → General → Keyboard, then tap Keep listening.",
+  "audio-capture":"No microphone is available. Another app may be using it. Close it, then tap Keep listening.",
+  "network":"Speech recognition needs an internet connection. Check Wi-Fi, then tap Keep listening.",
+  "language-not-supported":"This phone can't recognise English speech in the browser."
+};
+function heard(text){ $("heard").hidden=false; $("heardText").textContent=text; }
+function micState(txt,on){ $("micText").textContent=txt; $("micDot").classList.toggle("on",!!on); }
+function needTap(msg){ $("micHelp").textContent=msg; $("micHelp").hidden=false; $("relisten").hidden=false; micState("Not listening",false); }
 function startListening(){
-  tapMode=false;
+  tapMode=false; $("micHelp").hidden=true; $("relisten").hidden=true;
   if(!SR){ return setTap("This browser can't listen. Tap each yellow word as you read it."); }
   try{ rec=new SR(); }catch(_){ return setTap("This browser can't listen. Tap each yellow word as you read it."); }
-  rec.lang="en-US"; rec.continuous=true; rec.interimResults=true;
+  rec.lang="en-US"; rec.interimResults=true; rec.maxAlternatives=1;
+  rec.continuous=!IOS;               // iPhone Safari is more reliable listening one stretch at a time, restarting after each
+  rec.onstart=()=>micState("Listening…",true);
+  rec.onspeechstart=()=>micState("Hearing you…",true);
   rec.onresult=e=>{
-    let interim=[];
+    gotResult=true; restartFails=0;
+    let interim=[], shown="";
     for(let i=e.resultIndex;i<e.results.length;i++){
-      const r=e.results[i], ws=r[0].transcript.trim().split(/\s+/);
+      const r=e.results[i], t=r[0].transcript.trim(), ws=t.split(/\s+/);
+      shown+=t+" ";
       if(r.isFinal){ committed=advance(ws,committed); setPos(committed); } else interim=interim.concat(ws);
     }
+    if(shown.trim()) heard(shown.trim());
     if(interim.length) setPos(advance(interim,committed));
   };
   rec.onerror=ev=>{
     if(ev.error==="audio-capture" && beatOn){
-      // This browser can't share the mic between word listening and beats. Words matter more.
       stopBeats(); $("beatToggle").checked=false; predK=pos; predS=0;
       beatNote("This browser can't listen for words and beats at the same time, so beats are off.");
       return;
     }
-    if(["not-allowed","service-not-allowed","audio-capture"].includes(ev.error)){ listening=false;
-    setTap("The microphone is blocked. Allow it in the browser settings, or tap each yellow word."); } };
-  rec.onend=()=>{ if(listening){ committed=pos; try{rec.start();}catch(_){} } };
+    if(ev.error==="no-speech"||ev.error==="aborted") return;      // silence: just keep going
+    if(MIC_HELP[ev.error]){ listening=false; needTap(MIC_HELP[ev.error]); }
+    else micState("Mic problem: "+ev.error,false);
+  };
+  rec.onend=()=>{
+    if(!listening) return;
+    committed=pos;
+    try{ rec.start(); }
+    catch(_){ restartFails++; needTap("Listening stopped. Tap Keep listening to carry on."); }
+  };
   listening=true; committed=pos;
-  try{ rec.start(); $("micDot").classList.add("on"); $("micText").textContent="Listening…"; }
-  catch(_){ setTap("Tap each yellow word as you read it."); }
+  try{ rec.start(); micState("Starting the microphone…",true); }
+  catch(_){ needTap("The microphone didn't start. Tap Keep listening."); }
 }
-function stopListening(){ stopBeats(); listening=false; if(rec){try{rec.abort();}catch(_){}} $("micDot").classList.remove("on"); }
+function stopListening(){ stopBeats(); listening=false; if(rec){try{rec.abort();}catch(_){}} $("micDot").classList.remove("on"); $("relisten").hidden=true; }
 function setTap(msg){ stopBeats(); tapMode=true; $("micDot").classList.remove("on"); $("micText").textContent=msg; }
 
 function finishPage(){
