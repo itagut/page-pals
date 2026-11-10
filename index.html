@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Page Pals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Baloo+2:wght@600;800&display=swap">
+<style>
+/* Layout: one column. The photographed page is the hero of every screen; controls sit below it in big kid-friendly buttons. Single bright look by choice. */
+:root{
+  --sky:#cfeef7; --paper:#ffffff; --ink:#1f2b4d; --muted:#5b6a8f;
+  --sun:#ffc93c; --glow:#ffe58a; --done:#2f8f5b; --line:#d7e3ef; --warn:#c2410c;
+  --display:"Baloo 2","Trebuchet MS",system-ui,sans-serif;
+  --read:"Andika","Comic Sans MS",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--sky);color:var(--ink);font-family:var(--read);font-size:17px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:max(16px,env(safe-area-inset-top,0px)) 40px;min-height:100vh;-webkit-tap-highlight-color:transparent}
+.wrap{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--display);font-weight:800;font-size:2.3rem;margin:0;line-height:1}
+h2{font-family:var(--display);font-weight:600;font-size:1.3rem;margin:0}
+.sub{color:var(--muted);margin:4px 0 0}
+.card{background:var(--paper);border-radius:22px;padding:18px;box-shadow:0 3px 0 var(--line);display:flex;flex-direction:column;gap:14px}
+.picks{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media (max-width:480px){.picks{grid-template-columns:repeat(2,1fr)}}
+.pick{font:inherit;font-family:var(--display);font-weight:600;font-size:1.05rem;background:var(--paper);color:var(--ink);
+  border:3px solid var(--line);border-radius:16px;padding:10px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+.pick svg{width:70px;height:56px}
+.pick small{font-family:var(--read);font-weight:400;font-size:.8rem;color:var(--muted)}
+.pick[aria-pressed="true"]{border-color:var(--ink);background:var(--glow)}
+.btn{font-family:var(--display);font-weight:800;font-size:1.2rem;border:0;border-radius:999px;padding:13px 24px;
+  background:var(--ink);color:#fff;cursor:pointer;box-shadow:0 4px 0 #0d1530;text-align:center}
+.btn:active{transform:translateY(2px);box-shadow:0 2px 0 #0d1530}
+.btn.ghost{background:var(--paper);color:var(--ink);box-shadow:0 4px 0 var(--line);border:2px solid var(--line)}
+.btn.small{font-size:1rem;padding:9px 16px}
+.btn[disabled]{opacity:.5;cursor:default}
+button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline-offset:3px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.note{color:var(--muted);font-size:.95rem;margin:0}
+.err{color:var(--warn);font-weight:700;margin:0}
+.bar{height:14px;border-radius:999px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--done);transition:width .3s}
+
+#viewport{position:relative;overflow:hidden;border-radius:18px;background:#000;transition:height .5s}
+#stage{position:relative;transform-origin:0 0;transition:transform .6s ease}
+#stage canvas{display:block;width:100%;height:auto}
+#overlay{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation}
+.bubble{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:var(--paper);color:var(--ink);
+  font-family:var(--display);font-weight:600;padding:6px 16px;border-radius:999px;box-shadow:0 2px 6px rgba(0,0,0,.25);font-size:1rem;white-space:nowrap;z-index:2}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.95rem}
+.dot{width:13px;height:13px;border-radius:50%;background:var(--line);flex:none}
+.dot.on{background:#e5484d;animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.35}}
+.pages{font-family:var(--display);font-weight:600;color:var(--muted)}
+.field{width:100%;font:inherit;font-size:1.2rem;padding:10px 14px;border:3px solid var(--line);border-radius:14px;color:var(--ink);background:var(--paper)}
+.field:focus{outline:none;border-color:var(--ink)}
+.editor{display:flex;flex-direction:column;gap:10px;background:#fff7e0;border:3px solid #f59e0b;border-radius:16px;padding:14px}
+.editor label{font-family:var(--display);font-weight:600;font-size:1.1rem}
+.hint{margin:0;font-weight:700;color:var(--ink);background:#fff7e0;border-radius:12px;padding:10px 12px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.95rem}
+.legend span{display:flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:22px;height:16px;border-radius:4px;box-shadow:0 0 0 2px #fff inset}
+.sw.keep{border:4px solid #1d4ed8;background:rgba(29,78,216,.15)}
+.sw.skip{border:4px dashed #dc2626;background:rgba(220,38,38,.25)}
+.adding #overlay{touch-action:none;cursor:crosshair}
+.diag summary{cursor:pointer;font-weight:700;color:var(--muted)}
+.diag ol{margin:8px 0 0;padding-left:22px;font-size:.92rem;font-variant-numeric:tabular-nums;max-height:320px;overflow:auto}
+.diag li.off{color:#b91c1c}
+.ver{margin:0;font-size:.8rem;color:var(--muted)}
+.meter{width:56px;height:10px;border-radius:999px;background:var(--line);overflow:hidden;flex:none}
+.meter i{display:block;height:100%;width:0;background:var(--muted);border-radius:999px}
+.meter.beat i{background:#e5484d}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.stat{background:var(--sky);border-radius:16px;padding:12px}
+.stat b{display:block;font-family:var(--display);font-size:2rem;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat span{color:var(--muted);font-size:.95rem}
+.toggle{display:flex;align-items:center;gap:8px;font-size:1rem;cursor:pointer}
+.toggle input{width:22px;height:22px}
+@media (prefers-reduced-motion:reduce){#stage,#viewport{transition:none}.dot.on{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 1. PICK + PHOTO -->
+  <section id="s-start">
+    <div style="margin-bottom:14px">
+      <h1>Page Pals</h1>
+      <p class="sub">Snap a page from any book. Read it out loud and your buddy hops along.</p>
+      <p class="ver"></p>
+    </div>
+    <div class="card">
+      <h2>Pick a buddy</h2>
+      <div class="picks" id="picks"></div>
+      <div id="customRow" class="row" hidden>
+        <label class="btn ghost small" for="customFile">Upload a drawing</label>
+        <input id="customFile" class="vh" type="file" accept="image/*">
+        <span class="note" id="customNote">Draw a character on paper and take a photo of it.</span>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2 id="photoTitle">Now take a photo of a page</h2>
+      <p class="note">Lay the book flat in good light. Fill the screen with the page.</p>
+      <div class="row">
+        <label class="btn" for="camFile">Take a photo</label>
+        <input id="camFile" class="vh" type="file" accept="image/*" capture="environment">
+        <label class="btn ghost" for="libFile">Choose a photo</label>
+        <input id="libFile" class="vh" type="file" accept="image/*">
+        <button class="btn ghost" id="sampleBtn">Try a sample page</button>
+      </div>
+      <p class="err" id="startErr" hidden></p>
+    </div>
+  </section>
+
+  <!-- 2. READING THE PHOTO -->
+  <section id="s-scan" hidden>
+    <div class="card">
+      <h2>Finding the words…</h2>
+      <div class="bar"><i id="scanBar"></i></div>
+      <p class="note" id="scanNote">Getting ready. The first time takes a little longer.</p>
+    </div>
+  </section>
+
+  <!-- 3. REVIEW + READ (same stage) -->
+  <section id="s-read" hidden>
+    <div class="topbar" style="margin-bottom:10px">
+      <span class="pages" id="pageLabel">Page 1</span>
+      <div class="status"><span class="meter" id="meter" hidden title="Voice beats"><i id="lvl"></i></span><span class="dot" id="micDot"></span><span id="micText"></span></div>
+    </div>
+    <div id="viewport">
+      <div class="bubble" id="bubble" hidden></div>
+      <div id="stage"><canvas id="photo"></canvas><svg id="overlay"></svg></div>
+    </div>
+
+    <div class="card" id="reviewPanel" style="margin-top:14px">
+      <h2 id="foundTitle">Found words</h2>
+      <div class="legend"><span><i class="sw keep"></i>Will be read</span><span><i class="sw skip"></i>Skipped</span></div>
+      <p class="note" id="reviewNote">Grown-ups: tap a box to fix its spelling or skip it. If a word has no box, tap “Add a missing word.”</p>
+      <p class="hint" id="addHint" hidden>Drag a box around the missing word on the photo.</p>
+      <div class="editor" id="editor" hidden>
+        <label for="wordInput" id="editTitle">Fix this word</label>
+        <input id="wordInput" class="field" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <p class="err" id="editErr" hidden></p>
+        <div class="row">
+          <button class="btn small" id="saveWord">Save</button>
+          <button class="btn ghost small" id="toggleWord">Skip this word</button>
+          <button class="btn ghost small" id="cancelWord">Cancel</button>
+        </div>
+      </div>
+      <div class="row" id="reviewBtns">
+        <button class="btn" id="goBtn">Start reading</button>
+        <button class="btn ghost" id="addBtn">Add a missing word</button>
+        <button class="btn ghost" id="retakeBtn">Retake photo</button>
+      </div>
+      <details class="diag" id="diag">
+        <summary>Why were words skipped?</summary>
+        <p class="note" id="diagInfo"></p>
+        <ol id="diagList"></ol>
+      </details>
+      <p class="ver"></p>
+    </div>
+
+    <div class="card" id="pausePanel" style="margin-top:14px" hidden>
+      <h2>Paused</h2>
+      <div class="row">
+        <button class="btn" id="resumeBtn">Keep reading</button>
+        <button class="btn ghost small" id="overBtn">Start page over</button>
+        <button class="btn ghost small" id="fixBtn">Fix words</button>
+        <button class="btn ghost small" id="newPhotoBtn">New photo</button>
+      </div>
+    </div>
+
+    <div class="card" id="readPanel" style="margin-top:14px" hidden>
+      <div class="row" style="justify-content:space-between">
+        <div class="row">
+          <label class="toggle"><input type="checkbox" id="zoomToggle"> Zoom to the line</label>
+          <label class="toggle" id="beatRow"><input type="checkbox" id="beatToggle" checked> Bounce on voice beats</label>
+        </div>
+        <div class="row">
+          <button class="btn ghost small" id="skipBtn">Skip word</button>
+          <button class="btn ghost small" id="stopBtn">Pause</button>
+        </div>
+      </div>
+      <p class="note" id="readHint">Read the word under the yellow glow. Stuck? Tap it to hear it.</p>
+      <p class="note" id="beatNote" hidden></p>
+    </div>
+  </section>
+
+  <!-- 4. PAGE DONE -->
+  <section id="s-done" hidden>
+    <div class="card">
+      <h1 id="doneTitle">Page done!</h1>
+      <div class="stats">
+        <div class="stat"><b id="sWords">0</b><span>words read</span></div>
+        <div class="stat"><b id="sTime">0:00</b><span>reading time</span></div>
+        <div class="stat"><b id="sWpm">0</b><span>words per minute</span></div>
+        <div class="stat"><b id="sHelp">0</b><span>times they tapped for help</span></div>
+      </div>
+      <p class="note" id="sHard"></p>
+      <div class="row">
+        <button class="btn" id="nextBtn">Next page</button>
+        <button class="btn ghost" id="finishBtn">All done</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const VERSION="Version 6 (word finder from version 1)";
+document.querySelectorAll(".ver").forEach(e=>e.textContent=VERSION);
+let scanInfo="";
+function renderDiag(){
+  const esc=t=>String(t).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  $("diagInfo").textContent=scanInfo;
+  $("diagList").innerHTML=words.map(w=>`<li class="${w.off?"off":""}">“${esc(w.text)}” · ${typeof w.conf==="number"?Math.round(w.conf)+"%":"no score"} · ${w.off?"skipped: "+esc(w.why||"by you"):"read"}${w.manual?" · added by you":""}</li>`).join("");
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+/* ---------------- buddies ---------------- */
+const BUDDIES = {
+  caterpillar:{label:"Caterpillar", how:"hops word to word"},
+  ball:{label:"Bouncy ball", how:"bounces by syllable"},
+  butterfly:{label:"Butterfly", how:"flutters word to word"},
+  custom:{label:"My own", how:"your drawing"}
+};
+let buddy="caterpillar", customImg=null;
+
+function buddySVG(type){
+  // Drawn around (0,0) = feet/bottom centre, about 40 units tall, facing right.
+  if(type==="ball") return `<g class="squash"><circle cx="0" cy="-13" r="13" fill="#e5484d"/>
+    <path d="M-13,-13 A13,13 0 0 0 13,-13" fill="#ffc93c"/><circle cx="-4" cy="-19" r="3.5" fill="#fff" opacity=".8"/></g>`;
+  if(type==="butterfly") return `<g transform="translate(0,-18)">
+    <g class="wingL"><ellipse cx="-11" cy="-6" rx="11" ry="9" fill="#a855f7"/><ellipse cx="-8" cy="7" rx="7" ry="6" fill="#ec4899"/><circle cx="-12" cy="-7" r="3" fill="#fff" opacity=".7"/></g>
+    <g class="wingR"><ellipse cx="11" cy="-6" rx="11" ry="9" fill="#a855f7"/><ellipse cx="8" cy="7" rx="7" ry="6" fill="#ec4899"/><circle cx="12" cy="-7" r="3" fill="#fff" opacity=".7"/></g>
+    <rect x="-2.5" y="-12" width="5" height="24" rx="2.5" fill="#1f2b4d"/>
+    <path d="M-1,-12 Q-6,-22 -9,-22 M1,-12 Q6,-22 9,-22" stroke="#1f2b4d" stroke-width="1.6" fill="none"/></g>`;
+  if(type==="custom"){
+    if(customImg) return `<image href="${customImg}" x="-22" y="-44" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>`;
+    return `<circle cx="0" cy="-16" r="15" fill="#fff" stroke="#5b6a8f" stroke-width="2.5" stroke-dasharray="4 4"/><text x="0" y="-10" text-anchor="middle" font-size="18" font-family="Baloo 2,sans-serif" fill="#5b6a8f">?</text>`;
+  }
+  // caterpillar
+  return `<g class="squash">
+    <circle cx="-21" cy="-8" r="8" fill="#4cb86f"/><circle cx="-11" cy="-9" r="9" fill="#5fca80"/>
+    <circle cx="0" cy="-10" r="10" fill="#4cb86f"/>
+    <circle cx="12" cy="-14" r="11" fill="#5fca80"/>
+    <circle cx="16" cy="-17" r="2.6" fill="#1f2b4d"/><circle cx="20" cy="-12" r="1.6" fill="#e5484d"/>
+    <path d="M9,-24 Q7,-33 3,-34 M15,-24 Q18,-33 22,-33" stroke="#1f2b4d" stroke-width="1.8" fill="none"/>
+    <circle cx="3" cy="-34" r="2" fill="#ffc93c"/><circle cx="22" cy="-33" r="2" fill="#ffc93c"/></g>`;
+}
+function renderPicks(){
+  $("picks").innerHTML = Object.entries(BUDDIES).map(([k,b])=>
+    `<button class="pick" aria-pressed="${k===buddy}" data-buddy="${k}"><svg viewBox="-30 -48 60 52">${buddySVG(k)}</svg>${b.label}<small>${b.how}</small></button>`).join("");
+  $("customRow").hidden = buddy!=="custom";
+}
+$("picks").addEventListener("click",e=>{const b=e.target.closest("[data-buddy]"); if(b){buddy=b.dataset.buddy; renderPicks();}});
+$("customFile").addEventListener("change",async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const img=await loadImage(URL.createObjectURL(f));
+  const c=document.createElement("canvas"), s=Math.min(1,240/Math.max(img.width,img.height));
+  c.width=Math.round(img.width*s); c.height=Math.round(img.height*s);
+  c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+  customImg=c.toDataURL("image/png"); $("customNote").textContent="Got it! Your drawing is the buddy now.";
+  renderPicks(); e.target.value="";
+});
+
+/* ---------------- page state ---------------- */
+let W=0,H=0, words=[], lines=[], pos=0, committed=0;
+let pageNo=0, mode="review";
+let totals={words:0,ms:0,help:0}, pageStart=0, pageHelp=0, hardWords=new Set();
+let lastWordAt=0, raf=0, tapMode=false, rec=null, listening=false;
+
+function loadImage(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});}
+function show(id){["s-start","s-scan","s-read","s-done"].forEach(s=>$(s).hidden=s!==id); window.scrollTo(0,0);}
+function startErr(msg){$("startErr").textContent=msg; $("startErr").hidden=!msg;}
+
+/* ---------------- photo -> words ---------------- */
+let tessLoading=null;
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tessLoading) return tessLoading;
+  tessLoading=new Promise((res,rej)=>{const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"; s.onload=res; s.onerror=()=>{tessLoading=null;rej(new Error("load"))};
+    document.head.appendChild(s);});
+  return tessLoading;
+}
+let worker=null, scanPass=0;
+async function getWorker(){
+  if(worker) return worker;
+  await loadTesseract();
+  worker = await Tesseract.createWorker("eng",1,{logger:m=>{
+    if(m.status==="recognizing text"){
+      $("scanBar").style.width=Math.round(20+m.progress*80)+"%";
+      $("scanNote").textContent = ["Reading the page…","Looking again for words in the pictures…","Checking for light-coloured words…"][scanPass]||"Reading the page…";
+    } else if(m.progress!=null){$("scanBar").style.width=Math.round(m.progress*20)+"%";}
+  }});
+  return worker;
+}
+
+/* Is this something a reader would say, or a smudge the word finder made up? */
+const TWO=new Set("am an as at be by do go he hi if in is it me my no of oh ok on or so to up us we ox ah uh".split(" "));
+function plausible(key){
+  if(key.length===1) return key==="a"||key==="i";
+  if(key.length===2) return TWO.has(key);
+  if(!/[aeiouy]/.test(key.replace(/'/g,""))) return false;
+  if(/(.)\1\1/.test(key)) return false;
+  return true;
+}
+function wordConf(wd){
+  if(typeof wd.confidence==="number" && wd.confidence>0) return wd.confidence;
+  if(typeof wd.conf==="number" && wd.conf>0) return wd.conf;
+  const sy=(wd.symbols||[]).map(x=>x.confidence).filter(x=>typeof x==="number");
+  if(sy.length) return sy.reduce((a,b)=>a+b,0)/sy.length;
+  return null;                                                         // unknown: don't judge on it
+}
+function collectWords(data,tag){
+  const out=[]; let li=0;
+  const push=(wd,line)=>{
+    let raw=(wd.text||"").trim();
+    if(raw==="|"||raw==="l"||raw==="1") raw="I";                       // a lone bar is almost always the word "I"
+    const clean=raw.replace(/[^A-Za-z'’-]/g,"").replace(/^[-']+|[-']+$/g,"");
+    const key=norm(clean); if(!key) return;
+    const conf=wordConf(wd), b=wd.bbox;
+    const junky = clean.length < raw.replace(/[.,!?;:"“”()]/g,"").length*0.7;   // lots of stray symbols
+    out.push({text:clean,key,x:b.x0,y:b.y0,w:b.x1-b.x0,h:b.y1-b.y0,line:tag+line,conf,junky,off:false});
+  };
+  if(data.blocks && data.blocks.length)
+    data.blocks.forEach(bl=>(bl.paragraphs||[]).forEach(p=>(p.lines||[]).forEach(l=>{(l.words||[]).forEach(wd=>push(wd,li)); li++;})));
+  else if(data.words) data.words.forEach(wd=>push(wd,0));
+  return out;
+}
+function overlaps(a,b){
+  const ix=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x)), iy=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+  return ix*iy > 0.25*Math.min(a.w*a.h,b.w*b.h);
+}
+/* Put a word into reading order: same line if it sits level with one, otherwise a new line by height on the page. */
+let newLineId=0;
+function insertWord(list,nw){
+  const cy=nw.y+nw.h/2, info={};
+  list.forEach(w=>{const L=info[w.line]||(info[w.line]={sum:0,n:0,h:0}); L.sum+=w.y+w.h/2; L.n++; L.h=Math.max(L.h,w.h);});
+  let best=null, bestD=Infinity;
+  for(const [id,L] of Object.entries(info)){ const d=Math.abs(L.sum/L.n-cy); if(d<0.6*Math.max(L.h,nw.h) && d<bestD){best=id;bestD=d;} }
+  if(best!==null){
+    const idx=list.map((w,i)=>[w,i]).filter(([w])=>String(w.line)===best);
+    nw.line=idx[0][0].line;
+    const after=idx.find(([w])=>w.x>nw.x);
+    list.splice(after?after[1]:idx[idx.length-1][1]+1,0,nw);
+  } else {
+    nw.line="n"+(newLineId++);
+    const i=list.findIndex(w=>{const L=info[w.line]; return L.sum/L.n>cy;});
+    if(i<0) list.push(nw); else { const ln=list[i].line, start=list.findIndex(w=>w.line===ln); list.splice(start,0,nw); }
+  }
+  return nw;
+}
+function markUnsure(list){
+  const hasConf=w=>typeof w.conf==="number";
+  const solid=list.filter(w=>plausible(w.key)&&(!hasConf(w)||w.conf>=70)).map(w=>w.h).sort((a,b)=>a-b);
+  const med=solid.length?solid[Math.floor(solid.length/2)]:0;
+  // strict=2: all checks. 1: no score check. 0: only "does it look like a word at all".
+  const judge=(strict)=>list.forEach(w=>{
+    const short=w.key.length<=3;
+    let why="";
+    if(!plausible(w.key)) why="doesn't look like a word";
+    else if(w.junky) why="has stray symbols";
+    else if(strict>=2 && hasConf(w) && w.conf<(short?60:45)) why="low score";
+    else if(strict>=1 && med && w.h<med*0.45) why="much smaller than the other words";
+    else if(strict>=1 && med && w.h>med*2.4) why="much bigger than the other words";
+    else if(strict>=1 && w.w>w.h*25) why="too long and thin";
+    w.why=why; w.unsure=!!why; w.off=!!why;
+  });
+  // Safety net: if most real-looking words got skipped, loosen the checks step by step.
+  const real=list.filter(w=>plausible(w.key)), tooMany=()=>real.length && real.filter(w=>w.off).length > real.length*0.4;
+  judge(2); if(tooMany()) judge(1); if(tooMany()) judge(0);
+  // Very weak and implausible: not worth a box at all.
+  return list.filter(w=>!(hasConf(w) && w.conf<30 && !plausible(w.key)));
+}
+
+function lightTextCanvas(img){
+  const c=document.createElement("canvas"); c.width=W; c.height=H; const x=c.getContext("2d");
+  x.drawImage(img,0,0,W,H); const d=x.getImageData(0,0,W,H), px=d.data, n=W*H;
+  const mn=new Uint8Array(n), hist=new Uint32Array(256);
+  for(let i=0,j=0;i<n;i++,j+=4){ const v=Math.min(px[j],px[j+1],px[j+2]); mn[i]=v; hist[v]++; }
+  let acc=0, med=0; for(let v=0;v<256;v++){ acc+=hist[v]; if(acc>=n/2){med=v;break;} }
+  const t=med+(255-med)*0.28;
+  for(let i=0,j=0;i<n;i++,j+=4){ const o=mn[i]>t?0:255; px[j]=px[j+1]=px[j+2]=o; px[j+3]=255; }
+  x.putImageData(d,0,0); return c;
+}
+/* Extra passes: only keep words that come as a line of 2+ real-looking words (stray specks in pictures rarely do). */
+function addExtra(found, extra, minConf){
+  // Size of the page's main text, from the first pass. Much smaller writing is usually texture in a picture.
+  const base=found.filter(f=>plausible(f.key)), mid=a=>a.sort((x,y)=>x-y)[Math.floor(a.length/2)];
+  const medH = base.length>=5 ? mid(base.map(f=>f.h)) : 0, medCW = base.length>=5 ? mid(base.map(f=>f.w/f.key.length)) : 0;
+  const tiny=e=> medH && e.h<0.75*medH && (e.w/e.key.length)<0.6*medCW;
+  const ok=extra.filter(e=>(e.conf??80)>=minConf && plausible(e.key) && !e.junky && !tiny(e) && !found.some(f=>overlaps(f,e)));
+  const byLine={}; ok.forEach(e=>(byLine[e.line]=byLine[e.line]||[]).push(e));
+  Object.values(byLine).forEach(ws=>{ if(ws.length>=2) ws.forEach(e=>insertWord(found,e)); });
+}
+async function handlePhoto(file){
+  if(!file) return; startErr("");
+  show("s-scan"); $("scanBar").style.width="4%"; $("scanNote").textContent="Getting ready. The first time takes a little longer.";
+  try{
+    const img=await loadImage(URL.createObjectURL(file));
+    // Same word finding as version 1: one pass on a grey, high-contrast copy.
+    const s=Math.min(1,1600/Math.max(img.width,img.height));
+    W=Math.round(img.width*s); H=Math.round(img.height*s);
+    const cv=$("photo"); cv.width=W; cv.height=H; cv.getContext("2d").drawImage(img,0,0,W,H);
+    const oc=document.createElement("canvas"); oc.width=W; oc.height=H; const ox=oc.getContext("2d");
+    ox.filter="grayscale(1) contrast(1.6)"; ox.drawImage(img,0,0,W,H);
+    const w=await getWorker(); scanPass=0;
+    const {data}=await w.recognize(oc,{}, {blocks:true, text:false});
+    const found=[]; let li=0, dropped=0;
+    const pushWord=(wd,lineIdx)=>{
+      const clean=(wd.text||"").replace(/[^A-Za-z'’-]/g,"");
+      const key=norm(clean);
+      if(!key){ dropped++; return; }
+      if(key.length===1 && key!=="a" && key!=="i"){ dropped++; return; }
+      if((wd.confidence??100)<45){ dropped++; return; }
+      const b=wd.bbox;
+      found.push({text:clean,key,x:b.x0,y:b.y0,w:b.x1-b.x0,h:b.y1-b.y0,line:lineIdx,off:false,
+        conf:typeof wd.confidence==="number"?wd.confidence:null});
+    };
+    if(data.blocks && data.blocks.length){
+      data.blocks.forEach(bl=>(bl.paragraphs||[]).forEach(p=>(p.lines||[]).forEach(l=>{(l.words||[]).forEach(wd=>pushWord(wd,li)); li++;})));
+    } else if(data.words){ data.words.forEach(wd=>pushWord(wd,wd.line?.baseline?.y0??0)); }
+    scanInfo=`Photo ${W}×${H}. Found ${found.length} words, left out ${dropped} bits that weren't words.`;
+    if(!found.length){ show("s-start"); startErr("We couldn't find any words. Try again closer to the page, in brighter light, and without glare."); return; }
+    setPage(found);
+  }catch(err){
+    show("s-start");
+    startErr(err && err.message==="load"
+      ? "The word finder didn't load. Check the internet connection and try again."
+      : "Something went wrong reading that photo. Try another photo.");
+  }
+}
+$("camFile").addEventListener("change",e=>{handlePhoto(e.target.files[0]); e.target.value="";});
+$("libFile").addEventListener("change",e=>{handlePhoto(e.target.files[0]); e.target.value="";});
+
+/* sample page, drawn in code so it works with no camera or internet word finder */
+$("sampleBtn").addEventListener("click", async ()=>{
+  try{ await document.fonts.load("700 50px Andika"); }catch(_){}
+  W=1200; H=900; const cv=$("photo"); cv.width=W; cv.height=H; const c=cv.getContext("2d");
+  const g=c.createLinearGradient(0,0,0,560); g.addColorStop(0,"#9fd8f2"); g.addColorStop(1,"#e6f6fb");
+  c.fillStyle="#fffaf0"; c.fillRect(0,0,W,H); c.fillStyle=g; c.fillRect(40,40,W-80,520);
+  c.fillStyle="#ffc93c"; c.beginPath(); c.arc(960,150,70,0,7); c.fill();
+  c.fillStyle="#7cc56b"; c.beginPath(); c.ellipse(420,620,520,200,0,Math.PI,0); c.fill();
+  c.fillStyle="#5fb35a"; c.beginPath(); c.ellipse(950,600,420,140,0,Math.PI,0); c.fill();
+  c.fillStyle="#8a5a3b"; c.fillRect(190,330,24,130); c.fillStyle="#2f8f5b"; c.beginPath(); c.arc(202,310,70,0,7); c.fill();
+  c.fillStyle="#f28c38"; c.beginPath(); c.ellipse(640,430,46,28,0,0,7); c.fill(); c.beginPath(); c.arc(684,404,24,0,7); c.fill();
+  c.beginPath(); c.moveTo(672,388); c.lineTo(678,362); c.lineTo(688,386); c.fill(); c.beginPath(); c.moveTo(688,386); c.lineTo(698,362); c.lineTo(702,390); c.fill();
+  c.beginPath(); c.moveTo(596,424); c.quadraticCurveTo(560,400,568,440); c.quadraticCurveTo(580,452,598,438); c.fill();
+  c.fillStyle="#1f2b4d"; c.beginPath(); c.arc(692,400,4,0,7); c.fill();
+  c.fillStyle="#fffaf0"; c.fillRect(40,560,W-80,300);
+  const text="Once upon a time a little fox lived by a big green hill. Every day she ran up the hill to say hello to the sun.";
+  const fs=50; c.font=`700 ${fs}px Andika, "Comic Sans MS", sans-serif`; c.fillStyle="#1f2b4d"; c.textBaseline="alphabetic";
+  const found=[]; let x=80, y=640, line=0; const space=c.measureText(" ").width;
+  text.split(" ").forEach(t=>{
+    const w=c.measureText(t).width;
+    if(x+w>W-80){x=80; y+=78; line++;}
+    c.fillText(t,x,y);
+    const clean=t.replace(/[^A-Za-z']/g,"");
+    found.push({text:clean,key:norm(clean),x:x,y:y-fs*.82,w:c.measureText(clean).width,h:fs*1.05,line,off:false});
+    x+=w+space;
+  });
+  startErr(""); setPage(found);
+});
+
+/* ---------------- matching ---------------- */
+const norm = s => (s||"").toLowerCase().replace(/[’]/g,"'").replace(/[^a-z']/g,"").replace(/^'+|'+$/g,"");
+const SAME={to:"two",too:"two",two:"two",sea:"see",see:"see",son:"sun",sun:"sun",red:"read",read:"read",hole:"whole",whole:"whole",
+  ate:"eight",eight:"eight",there:"their",their:"their","they're":"their",its:"its","it's":"its",your:"your","you're":"your",
+  for:"four",four:"four",no:"know",know:"know",right:"write",write:"write",by:"buy",buy:"buy",bye:"buy",new:"knew",knew:"knew",
+  hi:"high",high:"high",one:"won",won:"won",dear:"deer",deer:"deer",fox:"fox",fax:"fox",box:"fox",socks:"fox",i:"eye",eye:"eye"};
+function lev(a,b){const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;
+  for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]}
+function similar(h,w){
+  if(!h) return false; if(h===w) return true;
+  if((SAME[h]||h)===(SAME[w]||w)) return true;
+  if(w.length>=4 && lev(h,w)<=1) return true;
+  return w.length>=7 && lev(h,w)<=2;
+}
+let active=[]; // indices of words not removed
+function advance(heard,start){
+  let p=start;
+  for(const raw of heard){const h=norm(raw); if(!h||p>=active.length) continue;
+    for(let k=0;k<3&&p+k<active.length;k++){ if(similar(h,words[active[p+k]].key)){p=p+k+1;break;} } }
+  return p;
+}
+
+/* ---------------- syllables (approximate) ---------------- */
+function syllables(word){
+  const w=word.toLowerCase(); if(w.length<=3) return [word];
+  const isV=(i)=>"aeiou".includes(w[i])||(w[i]==="y"&&i>0&&!"aeiou".includes(w[i-1]));
+  const groups=[]; let i=0;
+  while(i<w.length){ if(isV(i)){let j=i; while(j<w.length&&isV(j)) j++; groups.push([i,j]); i=j;} else i++; }
+  if(groups.length>1){ const last=groups[groups.length-1];
+    if(last[0]===w.length-1 && w[last[0]]==="e" && !(w.length>2 && w[w.length-2]==="l" && !isV(w.length-3))) groups.pop();
+    else if(w.endsWith("es")||w.endsWith("ed")){ const c=w[w.length-3]; if(last[0]===w.length-2 && !(w.endsWith("ed")&&"td".includes(c)) && !(w.endsWith("es")&&"sxzh".includes(c))) groups.pop(); }
+  }
+  if(groups.length<2) return [word];
+  const cuts=[];
+  for(let g=0;g<groups.length-1;g++){
+    const a=groups[g][1], b=groups[g+1][0], n=b-a;
+    if(n<=1) cuts.push(a);
+    else { const pair=w.slice(a,a+2); cuts.push(["ch","sh","th","ph","wh","ng","qu"].includes(pair)&&n===2 ? a : a+1); }
+  }
+  const parts=[]; let s=0; cuts.forEach(c=>{if(c>s){parts.push(word.slice(s,c)); s=c;}}); parts.push(word.slice(s));
+  return parts.filter(Boolean);
+}
+
+/* ---------------- voice beats (one loudness burst ≈ one syllable) ---------------- */
+let beatOn=false, beatCtx=null, beatStream=null, beatAn=null, beatBuf=null;
+let env=-100, floorDb=-60, peakDb=-100, valleyDb=0, armed=true, lastBeatAt=-9999;
+let predK=0, predS=0;
+const shownIdx=()=>Math.min(active.length-1, beatOn ? Math.max(pos,predK) : pos);
+
+async function startBeats(){
+  stopBeats();
+  if(buddy!=="ball" || !$("beatToggle").checked || tapMode) return;
+  try{
+    beatStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    const AC=window.AudioContext||window.webkitAudioContext; beatCtx=new AC(); await beatCtx.resume();
+    const src=beatCtx.createMediaStreamSource(beatStream);
+    const hp=beatCtx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=250;
+    const lp=beatCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=3000;
+    beatAn=beatCtx.createAnalyser(); beatAn.fftSize=1024; beatBuf=new Float32Array(beatAn.fftSize);
+    src.connect(hp); hp.connect(lp); lp.connect(beatAn);
+    env=-100; floorDb=-60; peakDb=-100; armed=true; predK=pos; predS=0;
+    beatOn=true; $("meter").hidden=false; $("beatNote").hidden=true;
+  }catch(_){
+    beatNote("Voice beats are off because the microphone couldn't be shared. The ball still moves word by word.");
+  }
+}
+function stopBeats(){
+  beatOn=false; $("meter").hidden=true;
+  if(beatStream){ beatStream.getTracks().forEach(t=>t.stop()); beatStream=null; }
+  if(beatCtx){ try{beatCtx.close();}catch(_){} beatCtx=null; }
+}
+function beatNote(msg){ $("beatNote").textContent=msg; $("beatNote").hidden=!msg; }
+
+function beatTick(t){
+  if(!beatOn||!beatAn) return;
+  beatAn.getFloatTimeDomainData(beatBuf);
+  let sum=0; for(let i=0;i<beatBuf.length;i++) sum+=beatBuf[i]*beatBuf[i];
+  const db=20*Math.log10(Math.sqrt(sum/beatBuf.length)+1e-9);
+  env=env*.55+db*.45;
+  if(env<floorDb) floorDb=floorDb*.7+env*.3; else floorDb+=.02;     // noise floor: drops fast, rises slowly
+  floorDb=Math.max(-90,floorDb);
+  const thresh=floorDb+12;
+  if(env>thresh){
+    if(armed){
+      if(env>peakDb) peakDb=env;
+      else if(peakDb-env>=3 && t-lastBeatAt>140){ onBeat(t); armed=false; valleyDb=env; }
+    } else {
+      valleyDb=Math.min(valleyDb,env);
+      if(env-valleyDb>=4){ armed=true; peakDb=env; }                  // rose again: next syllable
+    }
+  } else {
+    if(armed && peakDb>thresh && t-lastBeatAt>140) onBeat(t);
+    armed=true; peakDb=-100;
+  }
+  $("lvl").style.width=Math.max(0,Math.min(100,(env-floorDb)/30*100))+"%";
+}
+function onBeat(t){
+  lastBeatAt=t;
+  const m=$("meter"); m.classList.add("beat"); setTimeout(()=>m.classList.remove("beat"),120);
+  if(mode!=="read"||pos>=active.length) return;
+  const n=syllables(words[active[predK]].text).length;
+  if(predS+1<n) predS++;
+  else {
+    if(predK+1>=active.length || predK+1>pos+3) return;   // never run more than 3 words ahead of what was heard
+    predK++; predS=0; drawOverlay();
+  }
+  queue.push(anchorFor(predK,predS));
+}
+$("beatToggle").addEventListener("change",()=>{ if(mode!=="read") return;
+  if($("beatToggle").checked) startBeats(); else { stopBeats(); predK=pos; predS=0; queue=[firstAnchor(pos)]; drawOverlay(); } });
+
+/* ---------------- stage ---------------- */
+const NS="http://www.w3.org/2000/svg";
+function setPage(found){
+  words=found; pos=0; committed=0; mode="review"; pageNo++;
+  $("pageLabel").textContent="Page "+pageNo;
+  $("overlay").setAttribute("viewBox",`0 0 ${W} ${H}`);
+  closeEditor(); setAdding(false); updateFound();
+  $("reviewPanel").hidden=false; $("readPanel").hidden=true; $("pausePanel").hidden=true; $("bubble").hidden=true;
+  $("micText").textContent=""; $("micDot").classList.remove("on");
+  setZoom(false); $("zoomToggle").checked=false;
+  show("s-read"); drawOverlay();
+}
+function drawOverlay(){
+  const svg=$("overlay");
+  let out="";
+  if(mode==="review"){
+    const NSS='vector-effect="non-scaling-stroke"';
+    words.forEach((w,i)=>{
+      const x=w.x-5,y=w.y-5,ww=w.w+10,hh=w.h+10, sel=i===editIdx;
+      const col = sel ? "#f59e0b" : w.off ? "#dc2626" : "#1d4ed8";
+      out+=`<rect x="${x}" y="${y}" width="${ww}" height="${hh}" rx="6" fill="none" stroke="#fff" stroke-width="8" ${NSS} pointer-events="none"/>`;
+      out+=`<rect data-i="${i}" x="${x}" y="${y}" width="${ww}" height="${hh}" rx="6" fill="${w.off?"rgba(220,38,38,.28)":"rgba(29,78,216,.14)"}"
+        stroke="${col}" stroke-width="4" ${w.off&&!sel?'stroke-dasharray="7 5"':""} ${NSS}/>`;
+      if(w.off) out+=`<path d="M${w.x},${w.y} L${w.x+w.w},${w.y+w.h} M${w.x+w.w},${w.y} L${w.x},${w.y+w.h}" stroke="#dc2626" stroke-width="3" ${NSS} pointer-events="none"/>`;
+    });
+    if(dragBox){ const r=normRect(dragBox);
+      out+=`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6" fill="rgba(245,158,11,.25)" stroke="#f59e0b" stroke-width="4" ${NSS} pointer-events="none"/>`; }
+  } else {
+    active.forEach((wi,k)=>{ const w=words[wi];
+      if(k<pos) out+=`<rect x="${w.x}" y="${w.y+w.h+2}" width="${w.w}" height="${Math.max(3,w.h*.1)}" rx="2" fill="#2f8f5b" opacity=".85" pointer-events="none"/>`;
+      if(k===shownIdx()) out+=`<rect id="cur" data-k="${k}" x="${w.x-6}" y="${w.y-6}" width="${w.w+12}" height="${w.h+12}" rx="10" fill="rgba(255,229,138,.55)" stroke="#ffc93c" stroke-width="${Math.max(2,w.h*.07)}"/>`;
+    });
+    // invisible tap targets on every word
+    active.forEach((wi,k)=>{const w=words[wi]; out+=`<rect data-k="${k}" x="${w.x-6}" y="${w.y-6}" width="${w.w+12}" height="${w.h+12}" fill="transparent"/>`;});
+    out+=`<g id="buddy"><g id="buddyInner">${buddySVG(buddy)}</g></g>`;
+  }
+  svg.innerHTML=out;
+}
+$("overlay").addEventListener("click",e=>{
+  if(justDragged){ justDragged=false; return; }
+  const t=e.target.closest("[data-i],[data-k]"); if(!t) return;
+  if(mode==="review"){ if(adding) return; openEditor(+t.dataset.i); return; }
+  const si=shownIdx();
+  if(+t.dataset.k!==si) return;
+  if(tapMode){ setPos(pos+1); return; }
+  pageHelp++; hardWords.add(words[active[si]].key);
+  try{speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(words[active[si]].text); u.rate=.8; speechSynthesis.speak(u);}catch(_){}
+  lastWordAt=performance.now();
+});
+$("retakeBtn").onclick=()=>{pageNo--; show("s-start");};
+
+/* ---------- grown-up word editing ---------- */
+let editIdx=-1, pendingBox=null, adding=false, dragBox=null, justDragged=false;
+function updateFound(){
+  renderDiag();
+  const on=words.filter(w=>!w.off).length, unsure=words.filter(w=>w.unsure&&w.off).length;
+  $("foundTitle").textContent=`${on} word${on===1?"":"s"} will be read`;
+  $("reviewNote").textContent = (unsure?`${unsure} box${unsure===1?" looks":"es look"} like smudges or pictures, so ${unsure===1?"it's":"they're"} skipped. `:"")+
+    "Tap a box to fix its spelling, skip it or bring it back. If a word has no box, tap “Add a missing word.”";
+}
+function openEditor(i){
+  setAdding(false); editIdx=i; pendingBox=null;
+  const w=words[i];
+  const score = typeof w.conf==="number" ? ` · score ${Math.round(w.conf)}%` : " · no score";
+  $("editTitle").textContent = (w.off ? "Skipped" + (w.why?` (${w.why})`:"") : "Fix this word") + score;
+  $("wordInput").value=w.text; $("toggleWord").hidden=false;
+  $("toggleWord").textContent = w.off ? "Read this word" : "Skip this word";
+  showEditor();
+}
+function openAddEditor(box){
+  editIdx=-1; pendingBox=box;
+  $("editTitle").textContent="What does this word say?";
+  $("wordInput").value=""; $("toggleWord").hidden=true;
+  showEditor();
+}
+function showEditor(){
+  $("editErr").hidden=true; $("editor").hidden=false; $("reviewBtns").hidden=true; drawOverlay();
+  $("editor").scrollIntoView({block:"nearest",behavior:"smooth"});
+  setTimeout(()=>{try{$("wordInput").focus();}catch(_){}} ,250);
+}
+function closeEditor(){ editIdx=-1; pendingBox=null; $("editor").hidden=true; $("reviewBtns").hidden=false; }
+$("saveWord").onclick=()=>{
+  const text=$("wordInput").value.trim().replace(/\s+/g," ");
+  const key=norm(text);
+  if(!key || /\s/.test(text)){ $("editErr").textContent = key ? "Type one word per box." : "Type the word you see, or tap Cancel."; $("editErr").hidden=false; return; }
+  if(pendingBox){ const r=normRect(pendingBox); insertWord(words,{text,key,x:r.x,y:r.y,w:r.w,h:r.h,conf:100,off:false,manual:true}); }
+  else if(editIdx>=0){ const w=words[editIdx]; w.text=text; w.key=key; w.off=false; w.unsure=false; }
+  closeEditor(); updateFound(); drawOverlay();
+};
+$("wordInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("saveWord").click(); } });
+$("toggleWord").onclick=()=>{ const w=words[editIdx]; if(!w) return; w.off=!w.off; w.unsure=false; closeEditor(); updateFound(); drawOverlay(); };
+$("cancelWord").onclick=()=>{ closeEditor(); setAdding(false); drawOverlay(); };
+
+function setAdding(on){
+  adding=on; dragBox=null;
+  $("s-read").classList.toggle("adding",on);
+  $("addHint").hidden=!on;
+  $("addBtn").textContent = on ? "Cancel adding" : "Add a missing word";
+  if(on){ closeEditor(); $("addHint").scrollIntoView({block:"nearest",behavior:"smooth"}); }
+  drawOverlay();
+}
+$("addBtn").onclick=()=>setAdding(!adding);
+function toImg(e){ const r=$("overlay").getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; }
+function normRect(b){ return {x:Math.min(b.x0,b.x1), y:Math.min(b.y0,b.y1), w:Math.abs(b.x1-b.x0), h:Math.abs(b.y1-b.y0)}; }
+$("overlay").addEventListener("pointerdown",e=>{
+  if(mode!=="review"||!adding) return;
+  e.preventDefault(); const p=toImg(e); dragBox={x0:p.x,y0:p.y,x1:p.x,y1:p.y};
+  try{$("overlay").setPointerCapture(e.pointerId);}catch(_){}
+  drawOverlay();
+});
+$("overlay").addEventListener("pointermove",e=>{ if(!dragBox) return; const p=toImg(e); dragBox.x1=p.x; dragBox.y1=p.y; drawOverlay(); });
+$("overlay").addEventListener("pointerup",()=>{
+  if(!dragBox) return; const r=normRect(dragBox); const b=dragBox; dragBox=null; justDragged=true; setTimeout(()=>justDragged=false,350);
+  const minSide=W/80;
+  if(r.w<minSide||r.h<minSide){ drawOverlay(); $("addHint").textContent="That box was too small. Drag from one corner of the word to the other."; return; }
+  adding=false; $("s-read").classList.remove("adding"); $("addHint").hidden=true; $("addBtn").textContent="Add a missing word";
+  $("addHint").textContent="Drag a box around the missing word on the photo.";
+  openAddEditor(b);
+});
+
+/* ---------- pause keeps the photo and words ---------- */
+let paused=false, pauseAt=0;
+function pause(){
+  if(mode!=="read"||paused) return;
+  paused=true; pauseAt=performance.now(); stopListening();
+  $("readPanel").hidden=true; $("pausePanel").hidden=false; $("bubble").hidden=true;
+  $("micText").textContent="Paused";
+}
+function resume(){
+  paused=false; pageStart+=performance.now()-pauseAt; lastWordAt=performance.now();
+  $("pausePanel").hidden=true; $("readPanel").hidden=false;
+  startListening(); startBeats();
+}
+$("resumeBtn").onclick=resume;
+$("overBtn").onclick=()=>{
+  pos=0; committed=0; predK=0; predS=0; queue=[]; hop=null; pageHelp=0;
+  cur=firstAnchor(0); drawOverlay(); if($("zoomToggle").checked) setZoom(true);
+  pageStart=performance.now(); pauseAt=pageStart; resume();
+};
+$("fixBtn").onclick=()=>{
+  paused=false; mode="review"; setZoom(false); queue=[]; hop=null;
+  $("pausePanel").hidden=true; $("reviewPanel").hidden=false; $("micText").textContent="";
+  updateFound(); drawOverlay();
+};
+$("newPhotoBtn").onclick=()=>{ paused=false; cancelAnimationFrame(raf); pageNo--; show("s-start"); };
+
+/* zoom to current line */
+function setZoom(on){
+  const vp=$("viewport"), st=$("stage");
+  if(!on||mode!=="read"){ vp.style.height=""; st.style.transform=""; return; }
+  const k=st.offsetWidth/W, vw=vp.clientWidth, stageH=H*k;
+  const cw=words[active[Math.min(pos,active.length-1)]]; if(!cw) return;
+  // Scale so the text is about 36px tall on screen, then follow the current word.
+  const s=Math.max(1,Math.min(4, 36/(lineH*k)));
+  const vh=Math.max(200, Math.min(window.innerHeight*.45, stageH*s)); vp.style.height=vh+"px";
+  const cx=(cw.x+cw.w/2)*k, cy=(cw.y+cw.h/2 - lineH*.5)*k;
+  let tx=vw/2-cx*s, ty=vh/2-cy*s;
+  tx=Math.min(0,Math.max(vw-st.offsetWidth*s,tx)); ty=Math.min(0,Math.max(vh-stageH*s,ty));
+  st.style.transform=`translate(${tx}px,${ty}px) scale(${s})`;
+}
+$("zoomToggle").addEventListener("change",e=>setZoom(e.target.checked));
+window.addEventListener("resize",()=>setZoom($("zoomToggle").checked));
+
+/* ---------------- buddy motion ---------------- */
+let cur=null, hop=null, queue=[], facing=1, lineH=40;
+function anchorFor(k, syl){ // top of a word, optionally at one of its syllables
+  const w=words[active[Math.min(k,active.length-1)]];
+  if(syl==null) return {x:w.x+w.w/2, y:w.y-w.h*.1, line:w.line};
+  const parts=syllables(w.text), total=w.text.length||1; let acc=0;
+  for(let i=0;i<syl;i++) acc+=parts[i].length;
+  const mid=(acc+parts[syl].length/2)/total;
+  return {x:w.x+w.w*mid, y:w.y-w.h*.1, line:w.line};
+}
+function firstAnchor(k){ return buddy==="ball" ? anchorFor(k,0) : anchorFor(k); }
+function queueTo(fromK,toK){
+  for(let k=fromK;k<toK;k++){
+    if(buddy==="ball"){ const n=syllables(words[active[k]].text).length; for(let s=1;s<n;s++) queue.push(anchorFor(k,s)); }
+    queue.push(k+1<active.length ? firstAnchor(k+1) : endAnchor(k));
+  }
+}
+function endAnchor(k){ return {...anchorFor(k), x:words[active[k]].x+words[active[k]].w+lineH*.8, end:true}; }
+function loop(t){
+  const g=document.getElementById("buddy"), inner=document.getElementById("buddyInner");
+  if(g && cur){
+    if(!hop && queue.length){
+      const to=queue.shift(), d=Math.hypot(to.x-cur.x,to.y-cur.y);
+      const base = buddy==="ball"?260 : buddy==="butterfly"?520 : 420;
+      const dur = Math.max(140, (base + Math.min(400,d*.25)) / (1+queue.length*.6));
+      hop={from:{...cur},to,t0:t,dur,arc: (to.line!==cur.line? lineH*2.2 : lineH*(buddy==="ball"?.9:1.1))};
+      if(Math.abs(to.x-cur.x)>2) facing = to.x>cur.x?1:-1;
+    }
+    let x=cur.x, y=cur.y, sq=1;
+    if(hop){
+      const p=Math.min(1,(t-hop.t0)/hop.dur);
+      x=hop.from.x+(hop.to.x-hop.from.x)*p; y=hop.from.y+(hop.to.y-hop.from.y)*p - Math.sin(Math.PI*p)*hop.arc;
+      sq = p>.85 ? 1-(1-p)*1.2 : 1;
+      if(p>=1){cur={...hop.to}; hop=null; sq=.8;}
+    }
+    if(buddy==="butterfly") y += Math.sin(t/260)*lineH*.18;
+    const sc=lineH/30;
+    g.setAttribute("transform",`translate(${x},${y}) scale(${sc*facing},${sc})`);
+    const sqEl=inner.querySelector(".squash"); if(sqEl) sqEl.setAttribute("transform",`scale(${2-sq},${sq})`);
+    const wl=inner.querySelector(".wingL"), wr=inner.querySelector(".wingR");
+    if(wl){ const f=.35+.65*Math.abs(Math.cos(t/(hop?70:160))); wl.setAttribute("transform",`scale(${f},1)`); wr.setAttribute("transform",`scale(${f},1)`); }
+    beatTick(t);
+    // If beats ran ahead but no words were recognised for a while (humming, noise), go back to the last real word.
+    if(beatOn && mode==="read" && predK>pos && t-lastWordAt>2500 && t-lastBeatAt>1200){
+      predK=pos; predS=0; queue=[firstAnchor(pos)]; drawOverlay();
+    }
+    // idle nudges
+    const idle=t-Math.max(lastWordAt, beatOn?lastBeatAt:0), b=$("bubble"), c=document.getElementById("cur");
+    if(mode==="read" && !paused && pos<active.length && !hop && !queue.length && idle>3000){
+      b.hidden=false; b.textContent = idle>7000 ? (tapMode?"Tap the yellow word":"Stuck? Tap the yellow word") : "Keep reading!";
+      if(c && idle>7000) c.setAttribute("opacity", .55+.45*Math.abs(Math.sin(t/300)));
+    } else { b.hidden=true; c&&c.removeAttribute("opacity"); }
+  }
+  raf=requestAnimationFrame(loop);
+}
+
+/* ---------------- reading ---------------- */
+$("goBtn").onclick=()=>{
+  closeEditor(); setAdding(false); paused=false; $("pausePanel").hidden=true;
+  active=words.map((w,i)=>w.off?-1:i).filter(i=>i>=0);
+  if(!active.length){ $("foundTitle").textContent="Keep at least one word"; return; }
+  const hs=active.map(i=>words[i].h).sort((a,b)=>a-b); lineH=hs[Math.floor(hs.length/2)];
+  mode="read"; pos=0; committed=0; pageHelp=0; queue=[]; hop=null;
+  $("reviewPanel").hidden=true; $("readPanel").hidden=false;
+  drawOverlay(); cur=firstAnchor(0); lastWordAt=performance.now(); pageStart=performance.now();
+  const small = lineH*($("stage").offsetWidth/W) < 20;
+  $("zoomToggle").checked=small; setZoom(small);
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(loop);
+  predK=0; predS=0; beatNote("");
+  $("beatRow").hidden = buddy!=="ball";
+  startListening();
+  startBeats();
+};
+function setPos(p){
+  if(p<=pos) return;
+  if(beatOn){
+    // Words confirmed by the recogniser win: if the beats fell behind, jump the ball forward.
+    if(predK<p){ predK=p; predS=0; queue=[p<active.length?firstAnchor(p):endAnchor(active.length-1)]; }
+  } else queueTo(pos,p);
+  pos=Math.min(p,active.length); lastWordAt=performance.now();
+  drawOverlayKeepBuddy();
+  if($("zoomToggle").checked) setZoom(true);
+  if(pos>=active.length) setTimeout(finishPage,1500);
+}
+function drawOverlayKeepBuddy(){ drawOverlay(); } // buddy element is rebuilt; position comes from cur/hop state
+$("skipBtn").onclick=()=>{ if(pos<active.length){ committed=Math.max(committed,pos+1); setPos(pos+1);} };
+$("stopBtn").onclick=pause;
+
+function startListening(){
+  tapMode=false;
+  if(!SR){ return setTap("This browser can't listen. Tap each yellow word as you read it."); }
+  try{ rec=new SR(); }catch(_){ return setTap("This browser can't listen. Tap each yellow word as you read it."); }
+  rec.lang="en-US"; rec.continuous=true; rec.interimResults=true;
+  rec.onresult=e=>{
+    let interim=[];
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const r=e.results[i], ws=r[0].transcript.trim().split(/\s+/);
+      if(r.isFinal){ committed=advance(ws,committed); setPos(committed); } else interim=interim.concat(ws);
+    }
+    if(interim.length) setPos(advance(interim,committed));
+  };
+  rec.onerror=ev=>{
+    if(ev.error==="audio-capture" && beatOn){
+      // This browser can't share the mic between word listening and beats. Words matter more.
+      stopBeats(); $("beatToggle").checked=false; predK=pos; predS=0;
+      beatNote("This browser can't listen for words and beats at the same time, so beats are off.");
+      return;
+    }
+    if(["not-allowed","service-not-allowed","audio-capture"].includes(ev.error)){ listening=false;
+    setTap("The microphone is blocked. Allow it in the browser settings, or tap each yellow word."); } };
+  rec.onend=()=>{ if(listening){ committed=pos; try{rec.start();}catch(_){} } };
+  listening=true; committed=pos;
+  try{ rec.start(); $("micDot").classList.add("on"); $("micText").textContent="Listening…"; }
+  catch(_){ setTap("Tap each yellow word as you read it."); }
+}
+function stopListening(){ stopBeats(); listening=false; if(rec){try{rec.abort();}catch(_){}} $("micDot").classList.remove("on"); }
+function setTap(msg){ stopBeats(); tapMode=true; $("micDot").classList.remove("on"); $("micText").textContent=msg; }
+
+function finishPage(){
+  if(mode!=="read"||pos<active.length) return;
+  stopListening();
+  const ms=performance.now()-pageStart;
+  totals.words+=active.length; totals.ms+=ms; totals.help+=pageHelp;
+  mode="done"; showStats(false);
+}
+function showStats(all){
+  const secs=Math.max(1,Math.round(totals.ms/1000));
+  $("doneTitle").textContent = all ? "Great reading!" : `Page ${pageNo} done!`;
+  $("sWords").textContent=totals.words;
+  $("sTime").textContent=`${Math.floor(secs/60)}:${String(secs%60).padStart(2,"0")}`;
+  $("sWpm").textContent=Math.round(totals.words/(secs/60));
+  $("sHelp").textContent=totals.help;
+  $("sHard").textContent = hardWords.size ? "Tricky words: "+[...hardWords].join(", ") : "No help needed. Nice reading!";
+  $("nextBtn").hidden=all; $("finishBtn").textContent = all ? "Start a new book" : "All done";
+  show("s-done");
+}
+$("nextBtn").onclick=()=>{ $("photoTitle").textContent=`Take a photo of page ${pageNo+1}`; cancelAnimationFrame(raf); show("s-start"); };
+$("finishBtn").onclick=()=>{
+  if($("nextBtn").hidden){ totals={words:0,ms:0,help:0}; hardWords=new Set(); pageNo=0; $("photoTitle").textContent="Now take a photo of a page"; show("s-start"); }
+  else { cancelAnimationFrame(raf); showStats(true); }
+};
+
+renderPicks();
+</script>
+</body>
+</html>
