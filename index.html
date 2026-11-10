@@ -214,7 +214,7 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
 
 <script>
 const $ = id => document.getElementById(id);
-const VERSION="Version 7 (grey copy fixed for iPhone)";
+const VERSION="Version 8 (stray boxes skipped)";
 document.querySelectorAll(".ver").forEach(e=>e.textContent=VERSION);
 let scanInfo="";
 function renderDiag(){
@@ -402,6 +402,26 @@ function addExtra(found, extra, minConf){
   const byLine={}; ok.forEach(e=>(byLine[e.line]=byLine[e.line]||[]).push(e));
   Object.values(byLine).forEach(ws=>{ if(ws.length>=2) ws.forEach(e=>insertWord(found,e)); });
 }
+/* Stray boxes: real words sit beside other words (same line, or the line above/below).
+   Boxes alone in the picture are usually texture the word finder misread. They start skipped; a grown-up can bring them back. */
+function flagStrays(list){
+  if(list.length<4) return;
+  const hs=list.map(w=>w.h).sort((a,b)=>a-b), medH=hs[Math.floor(hs.length/2)];
+  const gap=(a,b)=>{ const dx=Math.max(0,Math.max(a.x,b.x)-Math.min(a.x+a.w,b.x+b.w)), dy=Math.max(0,Math.max(a.y,b.y)-Math.min(a.y+a.h,b.y+b.h)); return Math.hypot(dx,dy); };
+  list.forEach(w=>{
+    const sameLine=list.filter(o=>o!==w && String(o.line)===String(w.line));
+    let near=Infinity; list.forEach(o=>{ if(o!==w) near=Math.min(near,gap(w,o)); });
+    let why="";
+    if(!plausible(w.key)) why="doesn't look like a word";
+    else if(!sameLine.length && near>1.5*medH) why="by itself, away from the text";
+    else if(typeof w.conf==="number" && w.conf<40) why="very unsure what it says";
+    w.why=why; w.unsure=!!why; w.off=!!why;
+  });
+  // Safety net: never let this switch off most of the page.
+  const real=list.filter(w=>plausible(w.key));
+  if(real.length && real.filter(w=>w.off).length>real.length*0.4) list.forEach(w=>{ if(plausible(w.key)){ w.off=false; w.unsure=false; w.why=""; } });
+}
+
 async function handlePhoto(file){
   if(!file) return; startErr("");
   show("s-scan"); $("scanBar").style.width="4%"; $("scanNote").textContent="Getting ready. The first time takes a little longer.";
@@ -437,7 +457,8 @@ async function handlePhoto(file){
     if(data.blocks && data.blocks.length){
       data.blocks.forEach(bl=>(bl.paragraphs||[]).forEach(p=>(p.lines||[]).forEach(l=>{(l.words||[]).forEach(wd=>pushWord(wd,li)); li++;})));
     } else if(data.words){ data.words.forEach(wd=>pushWord(wd,wd.line?.baseline?.y0??0)); }
-    scanInfo=`Photo ${W}×${H}. Found ${found.length} words, left out ${dropped} bits that weren't words.`;
+    flagStrays(found);
+    scanInfo=`Photo ${W}×${H}. Found ${found.length} words (${found.filter(f=>f.off).length} look like stray marks), left out ${dropped} bits that weren't words.`;
     if(!found.length){ show("s-start"); startErr("We couldn't find any words. Try again closer to the page, in brighter light, and without glare."); return; }
     setPage(found);
   }catch(err){
