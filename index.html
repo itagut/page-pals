@@ -143,7 +143,7 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
       <h2 id="foundTitle">Found words</h2>
       <div class="legend"><span><i class="sw keep"></i>Will be read</span><span><i class="sw skip"></i>Skipped</span></div>
       <p class="note" id="reviewNote">Grown-ups: tap a box to fix its spelling or skip it. If a word has no box, tap “Add a missing word.”</p>
-      <p class="hint" id="addHint" hidden>Drag a box around the missing word on the photo.</p>
+      <p class="hint" id="addHint" hidden>Tap the missing word on the photo. You can also drag a box around it.</p>
       <div class="editor" id="editor" hidden>
         <label for="wordInput" id="editTitle">Fix this word</label>
         <input id="wordInput" class="field" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
@@ -214,7 +214,7 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
 
 <script>
 const $ = id => document.getElementById(id);
-const VERSION="Version 8 (stray boxes skipped)";
+const VERSION="Version 9 (tap to add a word)";
 document.querySelectorAll(".ver").forEach(e=>e.textContent=VERSION);
 let scanInfo="";
 function renderDiag(){
@@ -422,6 +422,19 @@ function flagStrays(list){
   if(real.length && real.filter(w=>w.off).length>real.length*0.4) list.forEach(w=>{ if(plausible(w.key)){ w.off=false; w.unsure=false; w.why=""; } });
 }
 
+// Grey, high-contrast copy for the word finder. Done pixel by pixel because Safari ignores canvas filters.
+let greyCanvas=null;
+function makeGrey(src){
+  const oc=document.createElement("canvas"); oc.width=W; oc.height=H; const ox=oc.getContext("2d");
+  ox.drawImage(src,0,0,W,H);
+  const id=ox.getImageData(0,0,W,H), px=id.data;
+  for(let j=0;j<px.length;j+=4){
+    let v=0.299*px[j]+0.587*px[j+1]+0.114*px[j+2];
+    v=(v-128)*1.6+128; v=v<0?0:v>255?255:v;
+    px[j]=px[j+1]=px[j+2]=v;
+  }
+  ox.putImageData(id,0,0); return oc;
+}
 async function handlePhoto(file){
   if(!file) return; startErr("");
   show("s-scan"); $("scanBar").style.width="4%"; $("scanNote").textContent="Getting ready. The first time takes a little longer.";
@@ -431,16 +444,7 @@ async function handlePhoto(file){
     const s=Math.min(1,1600/Math.max(img.width,img.height));
     W=Math.round(img.width*s); H=Math.round(img.height*s);
     const cv=$("photo"); cv.width=W; cv.height=H; cv.getContext("2d").drawImage(img,0,0,W,H);
-    // Grey, high-contrast copy for the word finder. Done pixel by pixel because Safari ignores canvas filters.
-    const oc=document.createElement("canvas"); oc.width=W; oc.height=H; const ox=oc.getContext("2d");
-    ox.drawImage(img,0,0,W,H);
-    const id=ox.getImageData(0,0,W,H), px=id.data;
-    for(let j=0;j<px.length;j+=4){
-      let v=0.299*px[j]+0.587*px[j+1]+0.114*px[j+2];
-      v=(v-128)*1.6+128; v=v<0?0:v>255?255:v;
-      px[j]=px[j+1]=px[j+2]=v;
-    }
-    ox.putImageData(id,0,0);
+    const oc=makeGrey(img); greyCanvas=oc;
     const w=await getWorker(); scanPass=0;
     const {data}=await w.recognize(oc,{}, {blocks:true, text:false});
     const found=[]; let li=0, dropped=0;
@@ -473,6 +477,7 @@ $("libFile").addEventListener("change",e=>{handlePhoto(e.target.files[0]); e.tar
 
 /* sample page, drawn in code so it works with no camera or internet word finder */
 $("sampleBtn").addEventListener("click", async ()=>{
+  greyCanvas=null;
   try{ await document.fonts.load("700 50px Andika"); }catch(_){}
   W=1200; H=900; const cv=$("photo"); cv.width=W; cv.height=H; const c=cv.getContext("2d");
   const g=c.createLinearGradient(0,0,0,560); g.addColorStop(0,"#9fd8f2"); g.addColorStop(1,"#e6f6fb");
@@ -636,6 +641,8 @@ function drawOverlay(){
         stroke="${col}" stroke-width="4" ${w.off&&!sel?'stroke-dasharray="7 5"':""} ${NSS}/>`;
       if(w.off) out+=`<path d="M${w.x},${w.y} L${w.x+w.w},${w.y+w.h} M${w.x+w.w},${w.y} L${w.x},${w.y+w.h}" stroke="#dc2626" stroke-width="3" ${NSS} pointer-events="none"/>`;
     });
+    if(pendingBox && !dragBox){ const r=normRect(pendingBox);
+      out+=`<rect x="${r.x-5}" y="${r.y-5}" width="${r.w+10}" height="${r.h+10}" rx="6" fill="rgba(245,158,11,.25)" stroke="#f59e0b" stroke-width="4" ${NSS} pointer-events="none"/>`; }
     if(dragBox){ const r=normRect(dragBox);
       out+=`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6" fill="rgba(245,158,11,.25)" stroke="#f59e0b" stroke-width="4" ${NSS} pointer-events="none"/>`; }
   } else {
@@ -680,16 +687,17 @@ function openEditor(i){
   $("toggleWord").textContent = w.off ? "Read this word" : "Skip this word";
   showEditor();
 }
-function openAddEditor(box){
+function openAddEditor(box, guess, failed){
   editIdx=-1; pendingBox=box;
-  $("editTitle").textContent="What does this word say?";
-  $("wordInput").value=""; $("toggleWord").hidden=true;
+  $("editTitle").textContent = guess ? "We read this word. Tap Save, or fix it."
+    : failed ? "We couldn't read that spot. Type the word." : "What does this word say?";
+  $("wordInput").value=guess||""; $("toggleWord").hidden=true;
   showEditor();
 }
 function showEditor(){
   $("editErr").hidden=true; $("editor").hidden=false; $("reviewBtns").hidden=true; drawOverlay();
   $("editor").scrollIntoView({block:"nearest",behavior:"smooth"});
-  setTimeout(()=>{try{$("wordInput").focus();}catch(_){}} ,250);
+  if(!$("wordInput").value) setTimeout(()=>{try{$("wordInput").focus();}catch(_){}} ,250);   // no keyboard when we already read it
 }
 function closeEditor(){ editIdx=-1; pendingBox=null; $("editor").hidden=true; $("reviewBtns").hidden=false; }
 $("saveWord").onclick=()=>{
@@ -724,12 +732,68 @@ $("overlay").addEventListener("pointerdown",e=>{
 $("overlay").addEventListener("pointermove",e=>{ if(!dragBox) return; const p=toImg(e); dragBox.x1=p.x; dragBox.y1=p.y; drawOverlay(); });
 $("overlay").addEventListener("pointerup",()=>{
   if(!dragBox) return; const r=normRect(dragBox); const b=dragBox; dragBox=null; justDragged=true; setTimeout(()=>justDragged=false,350);
-  const minSide=W/80;
-  if(r.w<minSide||r.h<minSide){ drawOverlay(); $("addHint").textContent="That box was too small. Drag from one corner of the word to the other."; return; }
-  adding=false; $("s-read").classList.remove("adding"); $("addHint").hidden=true; $("addBtn").textContent="Add a missing word";
-  $("addHint").textContent="Drag a box around the missing word on the photo.";
-  openAddEditor(b);
+  const minSide=W/80, isTap = r.w<minSide && r.h<minSide;
+  drawOverlay();
+  readSpot(isTap ? {tap:{x:b.x1,y:b.y1}} : {box:r});
 });
+
+/* Read just one spot of the photo: around a tap, or inside a dragged box. */
+let reading=false;
+const medianH=()=>{ const hs=words.map(w=>w.h).sort((a,b)=>a-b); return hs.length?hs[Math.floor(hs.length/2)]:H/25; };
+async function readSpot(req){
+  if(reading) return; reading=true;
+  const hint=$("addHint"); hint.textContent="Reading that spot…";
+  const lh=medianH();
+  let rx,ry,rw,rh;
+  if(req.tap){ rw=lh*9; rh=lh*1.9; rx=req.tap.x-rw/2; ry=req.tap.y-rh/2; }
+  else { const pad=lh*.25; rx=req.box.x-pad; ry=req.box.y-pad; rw=req.box.w+2*pad; rh=req.box.h+2*pad; }
+  rx=Math.max(0,rx); ry=Math.max(0,ry); rw=Math.min(W-rx,rw); rh=Math.min(H-ry,rh);
+  let hits=[];
+  try{
+    if(!greyCanvas) greyCanvas=makeGrey($("photo"));
+    const sc=Math.max(1,Math.min(3,48/lh));                       // enlarge small text before reading it
+    const c=document.createElement("canvas"); c.width=Math.round(rw*sc); c.height=Math.round(rh*sc);
+    const x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,c.width,c.height);
+    x.drawImage(greyCanvas,rx,ry,rw,rh,0,0,c.width,c.height);
+    const w=await getWorker();
+    await w.setParameters({tessedit_pageseg_mode:"7"});            // read it as a single line of text
+    const {data}=await w.recognize(c,{},{blocks:true,text:false});
+    await w.setParameters({tessedit_pageseg_mode:"3"});
+    const all=[]; (data.blocks||[]).forEach(bl=>(bl.paragraphs||[]).forEach(p=>(p.lines||[]).forEach(l=>(l.words||[]).forEach(wd=>all.push(wd)))));
+    all.forEach(wd=>{
+      const clean=(wd.text||"").replace(/[^A-Za-z'’-]/g,"").replace(/^[-']+|[-']+$/g,""), key=norm(clean);
+      if(!key || (key.length===1 && key!=="a" && key!=="i")) return;
+      const b=wd.bbox;
+      hits.push({text:clean,key,conf:wd.confidence,x:rx+b.x0/sc,y:ry+b.y0/sc,w:(b.x1-b.x0)/sc,h:(b.y1-b.y0)/sc});
+    });
+  }catch(_){ hits=[]; }
+  reading=false;
+  hint.textContent="Tap the missing word on the photo. You can also drag a box around it.";
+  // Leave out anything that already has a box.
+  const fresh=hits.filter(h=>!words.some(w=>!w.off && overlaps(w,h)));
+  let pick=null;
+  if(req.tap){
+    const t=req.tap, pad=lh*.3, under=hits.filter(h=>t.x>=h.x-pad && t.x<=h.x+h.w+pad);
+    if(under.length && !under.some(h=>fresh.includes(h))){ hint.textContent="That word already has a box. Tap a word without one."; return; }
+    const pool = under.length ? under.filter(h=>fresh.includes(h)) : fresh.filter(h=>Math.abs(h.x+h.w/2-t.x)<lh*2);
+    pool.forEach(h=>{ const d=Math.abs(h.x+h.w/2-t.x); if(!pick||d<pick.d) pick={...h,d}; });
+  } else if(fresh.length){
+    // Several words inside one dragged box: add the others straight away, confirm the first.
+    fresh.slice(1).forEach(h=>insertWord(words,{...h,line:null,off:false,manual:true}));
+    pick=fresh[0];
+  }
+  setAdding(false);
+  if(pick){
+    const box=req.tap ? {x0:pick.x,y0:pick.y,x1:pick.x+pick.w,y1:pick.y+pick.h}
+                      : {x0:req.box.x,y0:req.box.y,x1:req.box.x+req.box.w,y1:req.box.y+req.box.h};
+    openAddEditor(box, pick.text);
+  } else {
+    const box=req.tap ? {x0:req.tap.x-lh*1.5,y0:req.tap.y-lh*.6,x1:req.tap.x+lh*1.5,y1:req.tap.y+lh*.6}
+                      : {x0:req.box.x,y0:req.box.y,x1:req.box.x+req.box.w,y1:req.box.y+req.box.h};
+    openAddEditor(box, "", true);
+  }
+  updateFound(); drawOverlay();
+}
 
 /* ---------- pause keeps the photo and words ---------- */
 let paused=false, pauseAt=0;
