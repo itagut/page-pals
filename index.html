@@ -214,7 +214,7 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
 
 <script>
 const $ = id => document.getElementById(id);
-const VERSION="Version 6 (word finder from version 1)";
+const VERSION="Version 7 (grey copy fixed for iPhone)";
 document.querySelectorAll(".ver").forEach(e=>e.textContent=VERSION);
 let scanInfo="";
 function renderDiag(){
@@ -411,8 +411,16 @@ async function handlePhoto(file){
     const s=Math.min(1,1600/Math.max(img.width,img.height));
     W=Math.round(img.width*s); H=Math.round(img.height*s);
     const cv=$("photo"); cv.width=W; cv.height=H; cv.getContext("2d").drawImage(img,0,0,W,H);
+    // Grey, high-contrast copy for the word finder. Done pixel by pixel because Safari ignores canvas filters.
     const oc=document.createElement("canvas"); oc.width=W; oc.height=H; const ox=oc.getContext("2d");
-    ox.filter="grayscale(1) contrast(1.6)"; ox.drawImage(img,0,0,W,H);
+    ox.drawImage(img,0,0,W,H);
+    const id=ox.getImageData(0,0,W,H), px=id.data;
+    for(let j=0;j<px.length;j+=4){
+      let v=0.299*px[j]+0.587*px[j+1]+0.114*px[j+2];
+      v=(v-128)*1.6+128; v=v<0?0:v>255?255:v;
+      px[j]=px[j+1]=px[j+2]=v;
+    }
+    ox.putImageData(id,0,0);
     const w=await getWorker(); scanPass=0;
     const {data}=await w.recognize(oc,{}, {blocks:true, text:false});
     const found=[]; let li=0, dropped=0;
