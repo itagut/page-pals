@@ -4,7 +4,7 @@ Kids photograph a page from a real book, pick a buddy (caterpillar, bouncy ball,
 
 Live prototype: https://itagut.github.io/page-pals/
 
-## Where the web prototype is today (version 13)
+## Where the web prototype is today (version 14)
 
 - Take a photo or upload one or more pages; uploaded pages queue up for "Next page"
 - Word finding on the photo itself, so illustrations stay visible

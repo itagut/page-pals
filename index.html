@@ -241,7 +241,7 @@ button:focus-visible,label.btn:focus-within{outline:4px solid var(--sun);outline
 
 <script>
 const $ = id => document.getElementById(id);
-const VERSION="Version 13 (pinch to zoom the photo only)";
+const VERSION="Version 14 (microphone keeps working between pages)";
 document.querySelectorAll(".ver").forEach(e=>e.textContent=VERSION);
 let scanInfo="";
 function renderDiag(){
@@ -1021,7 +1021,7 @@ function setPos(p){
 function drawOverlayKeepBuddy(){ drawOverlay(); } // buddy element is rebuilt; position comes from cur/hop state
 $("skipBtn").onclick=()=>{ if(pos<active.length){ committed=Math.max(committed,pos+1); setPos(pos+1);} };
 $("stopBtn").onclick=pause;
-$("relisten").onclick=()=>{ startListening(); };
+$("relisten").onclick=()=>{ if(recState!=="on"){ try{rec&&rec.abort();}catch(_){} rec=null; recState="idle"; } startListening(); };
 
 const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
 let gotResult=false, restartFails=0;
@@ -1036,44 +1036,73 @@ function heard(text){ $("heard").hidden=false; $("heardText").textContent=text; 
 function heardEmpty(){ $("heard").hidden=false; $("heardText").textContent="nothing yet"; }
 function micState(txt,on){ $("micText").textContent=txt; $("micDot").classList.toggle("on",!!on); }
 function needTap(msg){ $("micHelp").textContent=msg; $("micHelp").hidden=false; $("relisten").hidden=false; micState("Not listening",false); }
-function startListening(){
-  tapMode=false; $("micHelp").hidden=true; $("relisten").hidden=true;
-  if(!SR){ return setTap("This browser can't listen. Tap each yellow word as you read it."); }
-  try{ rec=new SR(); }catch(_){ return setTap("This browser can't listen. Tap each yellow word as you read it."); }
-  rec.lang="en-US"; rec.interimResults=true; rec.maxAlternatives=1;
-  rec.continuous=!IOS;               // iPhone Safari is more reliable listening one stretch at a time, restarting after each
-  rec.onstart=()=>micState("Listening…",true);
-  rec.onspeechstart=()=>micState("Hearing you…",true);
-  rec.onresult=e=>{
+/* One microphone session for the whole visit. iPhone Safari gets stuck if a new one is started
+   before the old one has fully stopped, so we track its state and wait for it to finish. */
+let recState="idle", wantListen=false, pendingStart=false, startTimer=0, endTimer=0, startRetries=0;
+function makeRec(){
+  const r=new SR();
+  r.lang="en-US"; r.interimResults=true; r.maxAlternatives=1;
+  r.continuous=!IOS;               // iPhone Safari is more reliable listening one stretch at a time, restarting after each
+  r.onstart=()=>{ if(r!==rec) return; recState="on"; startRetries=0; clearTimeout(startTimer); micState("Listening…",true); };
+  r.onspeechstart=()=>{ if(r===rec) micState("Hearing you…",true); };
+  r.onresult=e=>{
+    if(r!==rec || !wantListen) return;
     gotResult=true; restartFails=0;
     let interim=[], shown="";
     for(let i=e.resultIndex;i<e.results.length;i++){
-      const r=e.results[i], t=r[0].transcript.trim(), ws=t.split(/\s+/);
+      const x=e.results[i], t=x[0].transcript.trim(), ws=t.split(/\s+/);
       shown+=t+" ";
-      if(r.isFinal){ committed=advance(ws,committed); setPos(committed); } else interim=interim.concat(ws);
+      if(x.isFinal){ committed=advance(ws,committed); setPos(committed); } else interim=interim.concat(ws);
     }
     if(shown.trim()) heard(shown.trim());
     if(interim.length) setPos(advance(interim,committed));
   };
-  rec.onerror=ev=>{
+  r.onerror=ev=>{
+    if(r!==rec) return;
     if(ev.error==="audio-capture" && beatOn){
       stopBeats(); $("beatToggle").checked=false; predK=pos; predS=0;
       beatNote("This browser can't listen for words and beats at the same time, so beats are off.");
       return;
     }
     if(ev.error==="no-speech"||ev.error==="aborted") return;      // silence: just keep going
-    if(MIC_HELP[ev.error]){ listening=false; needTap(MIC_HELP[ev.error]); }
+    if(MIC_HELP[ev.error]){ wantListen=false; listening=false; needTap(MIC_HELP[ev.error]); }
     else micState("Mic problem: "+ev.error,false);
   };
-  rec.onend=()=>{
-    if(!listening) return;
-    committed=pos;
-    try{ rec.start(); }
-    catch(_){ restartFails++; needTap("Listening stopped. Tap Keep listening to carry on."); }
+  r.onend=()=>{
+    if(r!==rec) return;
+    recState="idle"; clearTimeout(endTimer);
+    if(pendingStart || wantListen){ pendingStart=false; committed=pos; beginRec(); }
+    else micState(paused?"Paused":"",false);
   };
-  listening=true; committed=pos; heardEmpty();
-  try{ rec.start(); micState("Starting the microphone…",true); }
-  catch(_){ needTap("The microphone didn't start. Tap Keep listening."); }
+  return r;
+}
+function beginRec(){
+  if(!wantListen) return;
+  if(recState==="on"||recState==="starting") return;
+  if(recState==="ending"){ pendingStart=true; return; }               // start as soon as the old one has stopped
+  try{ if(!rec) rec=makeRec(); }catch(_){ return setTap("This browser can't listen. Tap each yellow word as you read it."); }
+  try{
+    rec.start(); recState="starting"; micState("Starting the microphone…",true);
+    clearTimeout(startTimer);
+    // If iPhone never confirms the start (the old session was still holding the mic), try once more on our own,
+    // then ask for one tap.
+    startTimer=setTimeout(()=>{
+      if(recState!=="starting") return;
+      recState="idle"; try{rec.abort();}catch(_){} rec=null;
+      if(startRetries<2){ startRetries++; micState("Starting the microphone…",true); setTimeout(beginRec,1200); }
+      else { startRetries=0; needTap("The microphone didn't start. Tap Keep listening."); }
+    },3000);
+  }catch(e){
+    if(e && e.name==="InvalidStateError"){ recState="on"; micState("Listening…",true); return; }   // it was already running
+    recState="idle"; rec=null; restartFails++;
+    needTap("Listening stopped. Tap Keep listening to carry on.");
+  }
+}
+function startListening(){
+  tapMode=false; $("micHelp").hidden=true; $("relisten").hidden=true;
+  if(!SR){ return setTap("This browser can't listen. Tap each yellow word as you read it."); }
+  wantListen=true; listening=true; committed=pos; heardEmpty();
+  beginRec();
 }
 let testRec=null;
 function stopMicTest(){ if(testRec){ try{testRec.abort();}catch(_){} testRec=null; } $("micTestBtn").textContent="Test the microphone"; }
@@ -1081,6 +1110,7 @@ $("micTestBtn").onclick=()=>{
   if(testRec){ stopMicTest(); $("micTestState").textContent="Test stopped."; return; }
   const st=$("micTestState"), out=$("micTestOut"); st.hidden=false; out.hidden=false; out.textContent="Heard: nothing yet";
   if(!SR){ st.textContent="This browser has no speech recognition. On iPhone, use Safari."; return; }
+  if(rec){ try{rec.abort();}catch(_){} rec=null; recState="idle"; }
   try{ testRec=new SR(); }catch(e){ st.textContent="Speech recognition couldn't start: "+e.message; return; }
   const r=testRec; r.lang="en-US"; r.interimResults=true; r.continuous=!IOS;
   const log=[]; const note=t=>{ log.push(t); st.textContent="Status: "+log.slice(-4).join(" → "); };
@@ -1091,7 +1121,16 @@ $("micTestBtn").onclick=()=>{
   $("micTestBtn").textContent="Stop the test";
   try{ r.start(); note("starting"); }catch(e){ note("couldn't start: "+e.message); stopMicTest(); }
 };
-function stopListening(){ stopBeats(); listening=false; if(rec){try{rec.abort();}catch(_){}} $("micDot").classList.remove("on"); $("relisten").hidden=true; }
+function stopListening(){
+  stopBeats(); listening=false; wantListen=false; pendingStart=false; clearTimeout(startTimer);
+  if(rec && (recState==="on"||recState==="starting")){
+    recState="ending";
+    try{ rec.stop(); }catch(_){ recState="idle"; }
+    // If iPhone never reports the end, start fresh next time instead of waiting forever.
+    clearTimeout(endTimer); endTimer=setTimeout(()=>{ if(recState==="ending"){ recState="idle"; rec=null; if(pendingStart){ pendingStart=false; beginRec(); } } },5000);
+  }
+  $("micDot").classList.remove("on"); $("relisten").hidden=true;
+}
 function setTap(msg){ stopBeats(); tapMode=true; $("micDot").classList.remove("on"); $("micText").textContent=msg; }
 
 function finishPage(){
